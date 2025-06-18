@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>El Panze - Menú</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Dancing+Script:wght@400;700&family=Lobster&family=Roboto:wght@400;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+</head>
+<body class="wood-background">
+    <header>
+        <p class="welcome-text">Bienvenido</p>
+        <h1 class="menu-title">Menú</h1>
+    </header>
+
+    <main>
+        <section id="menu-categories">
+            <div class="category-toggle" data-category="hamburguesas">
+                <div class="category-icon-wrapper">
+                    <i class="fas fa-hamburger category-icon"></i> </div>
+                <span class="category-name">Hamburguesas</span>
+                <i class="fas fa-chevron-down dropdown-arrow"></i>
+            </div>
+            <div class="category-content" id="hamburguesas-content">
+                <div class="menu-item">
+                    <span class="item-name">ESPECIAL</span>
+                    <span class="item-price">$9.900</span>
+                    <button class="add-to-cart-btn" data-name="Hamburguesa Especial" data-price="9900"><i class="fas fa-plus"></i></button>
+                    <p class="item-description">125gr Carne 100% de res, Tocineta, Vegetales frescos, Queso, Papita Chips.</p>
+                </div>
+                <div class="menu-item">
+                    <span class="item-name">NUEVO - Pechuga de pollo</span>
+                    <span class="item-price">$10.900</span>
+                    <button class="add-to-cart-btn" data-name="Hamburguesa Pechuga Pollo" data-price="10900"><i class="fas fa-plus"></i></button>
+                    <p class="item-description">125gr de Pechuga de Pollo, Tocineta, Vegetales frescos, Queso, Papita Chips.</p>
+                </div>
+                <div class="menu-item">
+                    <span class="item-name">Doble Carne</span>
+                    <span class="item-price">$14.900</span>
+                    <button class="add-to-cart-btn" data-name="Hamburguesa Doble Carne" data-price="14900"><i class="fas fa-plus"></i></button>
+                    <p class="item-description">2 porciones de Carne 100% de Res de 125 gr, Tocineta, Vegetales frescos, Queso, Papita Chips.</p>
+                </div>
+            </div>
+
+            <div class="category-toggle" data-category="sandwiches">
+                <div class="category-icon-wrapper">
+                    <i class="fas fa-sandwich category-icon"></i> </div>
+                <span class="category-name">Sandwiches</span>
+                <i class="fas fa-chevron-down dropdown-arrow"></i>
+            </div>
+            <div class="category-content" id="sandwiches-content">
+                <div class="menu-item">
+                    <span class="item-name">De la Casa</span>
+                    <span class="item-price">$10.900</span>
+                    <button class="add-to-cart-btn" data-name="Sandwich De la Casa" data-price="10900"><i class="fas fa-plus"></i></button>
+                    <p class="item-description">Carne de Res, Tocineta, Cerdo, Pollo, Jamón de cordero, Queso Doble Crema, Pan Baguette 20cm.</p>
+                </div>
+            </div>
+            
+            <div class="category-toggle active" data-category="twister">
+                <div class="category-icon-wrapper">
+                    <i class="fas fa-utensils category-icon"></i> </div>
+                <span class="category-name">Twister</span>
+                <i class="fas fa-chevron-up dropdown-arrow"></i> </div>
+            <div class="category-content active" id="twister-content">
+                <div class="menu-item">
+                    <span class="item-name">NUEVO - Twister</span>
+                    <span class="item-price">$10.900</span>
+                    <button class="add-to-cart-btn" data-name="Sandwich Twister" data-price="10900"><i class="fas fa-plus"></i></button>
+                    <p class="item-description">125gr de Pechuga de pollo, Lechuga, Tomate, Cebolla, Queso Doble Crema, Tortilla.</p>
+                </div>
+            </div>
+
+            <div class="category-toggle" data-category="choriperro">
+                <div class="category-icon-wrapper">
+                    <i class="fas fa-hotdog category-icon"></i> </div>
+                <span class="category-name">Choriperro</span>
+                <i class="fas fa-chevron-down dropdown-arrow"></i>
+            </div>
+            <div class="category-content" id="choriperro-content">
+                <div class="menu-item">
+                    <span class="item-name">Choriperro</span>
+                    <span class="item-price">$6.000</span>
+                    <button class="add-to-cart-btn" data-name="Choriperro" data-price="6000"><i class="fas fa-plus"></i></button>
+                </div>
+                <div class="menu-item">
+                    <span class="item-name">Choriperro Especial</span>
+                    <span class="item-price">$8.000</span>
+                    <button class="add-to-cart-btn" data-name="Choriperro Especial" data-price="8000"><i class="fas fa-plus"></i></button>
+                </div>
+            </div>
+
+            <div class="category-toggle" data-category="mazorcadas">
+                <div class="category-icon-wrapper">
+                    <i class="fas fa-corn category-icon"></i> </div>
+                <span class="category-name">Mazorcadas</span>
+                <i class="fas fa-chevron-down dropdown-arrow"></i>
+            </div>
+            <div class="category-content" id="mazorcadas-content">
+                <div class="menu-item">
+                    <span class="item-name">ESPECIAL Mazorcada</span>
+                    <span class="item-price">$14.900</span>
+                    <button class="add-to-cart-btn" data-name="Mazorcada Especial" data-price="14900"><i class="fas fa-plus"></i></button>
+                    <p class="item-description">200 gr de Maíz Tierno, Tocineta, Carne de Res, Cerdo y Pollo (80 gr cada una), papa fosforito y queso gratinado.</p>
+                </div>
+            </div>
+
+            <div class="category-toggle" data-category="panzerottis">
+                <div class="category-icon-wrapper">
+                    <i class="fas fa-pizza-slice category-icon"></i> </div>
+                <span class="category-name">Panzerottis</span>
+                <i class="fas fa-chevron-down dropdown-arrow"></i>
+            </div>
+            <div class="category-content" id="panzerottis-content">
+                <div class="menu-item">
+                    <span class="item-name">Ranchero</span>
+                    <span class="item-price">$3.500</span>
+                    <button class="add-to-cart-btn" data-name="Panzerotti Ranchero" data-price="3500"><i class="fas fa-plus"></i></button>
+                </div>
+                <div class="menu-item">
+                    <span class="item-name">Pollo con Champiñones</span>
+                    <span class="item-price">$3.500</span>
+                    <button class="add-to-cart-btn" data-name="Panzerotti Pollo Champiñones" data-price="3500"><i class="fas fa-plus"></i></button>
+                </div>
+                <div class="menu-item">
+                    <span class="item-name">Mexicano</span>
+                    <span class="item-price">$3.500</span>
+                    <button class="add-to-cart-btn" data-name="Panzerotti Mexicano" data-price="3500"><i class="fas fa-plus"></i></button>
+                </div>
+            </div>
+
+            <div class="category-toggle" data-category="adicionales">
+                <div class="category-icon-wrapper">
+                    <i class="fas fa-plus-circle category-icon"></i> </div>
+                <span class="category-name">Adicionales</span>
+                <i class="fas fa-chevron-down dropdown-arrow"></i>
+            </div>
+            <div class="category-content" id="adicionales-content">
+                <div class="menu-item">
+                    <span class="item-name">Queso</span>
+                    <span class="item-price">$1.500</span>
+                    <button class="add-to-cart-btn" data-name="Adicional Queso" data-price="1500"><i class="fas fa-plus"></i></button>
+                </div>
+                <div class="menu-item">
+                    <span class="item-name">Jamón</span>
+                    <span class="item-price">$1.500</span>
+                    <button class="add-to-cart-btn" data-name="Adicional Jamon" data-price="1500"><i class="fas fa-plus"></i></button>
+                </div>
+                <div class="menu-item">
+                    <span class="item-name">Tocineta</span>
+                    <span class="item-price">$1.500</span>
+                    <button class="add-to-cart-btn" data-name="Adicional Tocineta" data-price="1500"><i class="fas fa-plus"></i></button>
+                </div>
+                <div class="menu-item">
+                    <span class="item-name">Papa a la francesa</span>
+                    <span class="item-price">$4.000</span>
+                    <button class="add-to-cart-btn" data-name="Adicional Papa Francesa" data-price="4000"><i class="fas fa-plus"></i></button>
+                </div>
+                <div class="menu-item">
+                    <span class="item-name">Costo Recipiente</span>
+                    <span class="item-price">$500</span>
+                    <button class="add-to-cart-btn" data-name="Costo Recipiente" data-price="500"><i class="fas fa-plus"></i></button>
+                </div>
+            </div>
+
+            <div class="category-toggle" data-category="bebidas">
+                <div class="category-icon-wrapper">
+                    <i class="fas fa-wine-glass category-icon"></i> </div>
+                <span class="category-name">Bebidas</span>
+                <i class="fas fa-chevron-down dropdown-arrow"></i>
+            </div>
+            <div class="category-content" id="bebidas-content">
+                <div class="menu-item">
+                    <span class="item-name">Coca-Cola</span>
+                    <span class="item-price">$3.500</span>
+                    <button class="add-to-cart-btn" data-name="Coca-Cola" data-price="3500"><i class="fas fa-plus"></i></button>
+                </div>
+                <div class="menu-item">
+                    <span class="item-name">Hit</span>
+                    <span class="item-price">$3.500</span>
+                    <button class="add-to-cart-btn" data-name="Hit" data-price="3500"><i class="fas fa-plus"></i></button>
+                </div>
+            </div>
+
+        </section>
+    </main>
+
+    <button id="floating-cart-btn">
+        <i class="fas fa-shopping-cart"></i>
+        <span id="cart-item-count">0</span>
+    </button>
+
+    <div id="cart-modal" class="modal">
+        <div class="modal-content">
+            <span class="close-button">&times;</span>
+            <h2 class="modal-title">Tu Pedido</h2>
+            <ul id="modal-cart-list">
+                </ul>
+            <p class="cart-summary">Total: <span id="modal-cart-total">$0</span></p>
+            <div class="modal-actions">
+                <button id="clear-modal-cart" class="modal-btn secondary">Vaciar Pedido</button>
+                <button id="checkout-modal-btn" class="modal-btn primary">Confirmar Pedido</button>
+            </div>
+        </div>
+    </div>
+
+    <footer class="bottom-nav-bar">
+        <div class="nav-item"><i class="fas fa-bars"></i></div>
+        <div class="nav-item"><i class="fas fa-square"></i></div>
+        <div class="nav-item"><i class="fas fa-play"></i></div>
+    </footer>
+
+    <script src="script.js"></script>
+</body>
+</html>
