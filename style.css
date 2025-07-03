@@ -158,7 +158,7 @@ main {
 
 .category-name {
     font-family: 'Italianno', cursive; /* Same as Menu title for consistency */
-    font-size: 8.6em;
+    font-size: 3.6em;
     flex-grow: 1; /* Allows name to take available space */
     text-align: left;
     border-radius: 10%;
