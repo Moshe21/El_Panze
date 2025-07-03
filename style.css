@@ -18,7 +18,7 @@
     max-width: 300px; /* Limit logo size */
     height: auto;
     display: block;
-    margin: 0 auto; /* Center logo */
+    align-items: left;
 }
 
 
@@ -26,7 +26,7 @@ body {
     font-family: 'Roboto', sans-serif; /* A clean sans-serif for general text */
     margin: 0;
     padding: 0;
-    background-image: url('image.png'); /* Your provided background image */
+    background-image: url('/img/fondo_maderas.png'); /* Your provided background image */
     background-size: cover;
     background-attachment: fixed;
     background-repeat: no-repeat;
@@ -51,8 +51,8 @@ header {
 }
 
 .welcome-text {
-    font-family: 'Dancing Script', cursive; /* Elegant script font */
-    font-size: 2em;
+    font-family: 'Italianno'; /* Elegant script font */
+    font-size: 5em;
     margin: 0;
     text-shadow: 1px 1px 2px rgba(0,0,0,0.3);
 }
@@ -125,8 +125,8 @@ main {
 .category-icon-wrapper {
     background-color: var(--color-light-gray);
     border-radius: 50%;
-    width: 45px;
-    height: 45px;
+    width: 100px;
+    height: 100px;
     display: flex;
     justify-content: center;
     align-items: center;
@@ -135,23 +135,44 @@ main {
     flex-shrink: 0; /* Prevent icon from shrinking */
 }
 
+.logo-products {
+    width: 70%; /* Adjust as needed */
+    height: auto;
+    margin: 0 auto; /* Center the logo */
+}
+.text_products {
+    filter: hue-rotate(180deg); 
+    margin: auto;
+    -webkit-text-stroke: 2px black; /* Ancho de 2px, color negro */
+  color: rgb(255, 0, 0); /* Color del texto */
+
+}
+
+
 .category-icon {
-    font-size: 1.8em;
+    size: 1px;
     color: var(--color-text-dark);
 }
 
+
 .category-name {
-    font-family: 'Lobster', cursive; /* Same as Menu title for consistency */
-    font-size: 1.6em;
+    font-family: 'Italianno', cursive; /* Same as Menu title for consistency */
+    font-size: 8.6em;
     flex-grow: 1; /* Allows name to take available space */
     text-align: left;
-    text-shadow: 1px 1px 0px rgba(255,255,255,0.5);
-    padding-right: 10px; /* Space before arrow */
+    border-radius: 10%;
+    text-shadow: 2px 2px 10px rgba(0, 0, 0, 0.5);
+    padding-right: 1px; /* Space before arrow */;
+    transition: color 0.3s ease;   
+    
+  -webkit-text-stroke: 2px black; /* Ancho de 2px, color negro */
+  color: rgb(0, 0, 0); /* Color del texto */
+
 }
 
 .dropdown-arrow {
-    font-size: 1.2em;
-    color: var(--color-text-dark);
+    size: 50%;
+    direction: right;
     transition: transform 0.3s ease;
 }
 
@@ -164,9 +185,9 @@ main {
     background-color: rgba(255, 255, 255, 0.85); /* Slightly transparent white for content */
     border: 2px solid var(--color-border-dark);
     border-top: none; /* No top border, blends with toggle */
-    border-bottom-left-radius: 8px;
-    border-bottom-right-radius: 8px;
-    padding: 15px;
+    border-bottom-left-radius: 10px;
+    border-bottom-right-radius: 10px;
+    padding: -10px;
     max-height: 0; /* Hidden by default */
     overflow: hidden;
     transition: max-height 0.5s ease-out, padding 0.5s ease-out; /* Smooth transition */

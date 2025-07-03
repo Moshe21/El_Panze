@@ -7,20 +7,25 @@
     <link rel="stylesheet" href="style.css">
     <link href="https://fonts.googleapis.com/css2?family=Dancing+Script:wght@400;700&family=Lobster&family=Roboto:wght@400;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+     <link href="https://fonts.googleapis.com/css2?family=Italianno&display=swap" rel="stylesheet">
 </head>
 <body class="wood-background">
     <header>
         <p class="welcome-text">Bienvenido</p>
-        <h1 class="menu-title">Menú</h1>
-    </header>
+        </header>
 
     <main>
+         <img src="/img/Menu.png" alt="El Panze Logo" class="logo">
+   
         <section id="menu-categories">
             <div class="category-toggle" data-category="hamburguesas">
                 <div class="category-icon-wrapper">
-                    <i class="fas fa-hamburger category-icon"></i> </div>
+                    <img src="/img/logo_hambuergesa.png" alt="Hamburguesa Icon" class="logo-products">
+                </div>
+                <!--<span class="category-name">Hamburguesas</span>-->
                 <span class="category-name">Hamburguesas</span>
-                <i class="fas fa-chevron-down dropdown-arrow"></i>
+                <!--<span <img src =img/text_hamburguesa.png alt="Hamburguesas Text" class="text_products">-->
+                <img src="img/desplegable.png" class="fas fa-chevron-down dropdown-arrow" alt="Desplegable Icon">
             </div>
             <div class="category-content" id="hamburguesas-content">
                 <div class="menu-item">
@@ -45,24 +50,27 @@
 
             <div class="category-toggle" data-category="sandwiches">
                 <div class="category-icon-wrapper">
-                    <i class="fas fa-sandwich category-icon"></i> </div>
-                <span class="category-name">Sandwiches</span>
-                <i class="fas fa-chevron-down dropdown-arrow"></i>
+                    <img src="/img/logo_sandwich.png" alt="Hamburguesa Icon" class="logo-products">
+                </div>
+                    <span class="category-name">Sandwiches</span>
+                    <img src="img/desplegable.png" class="fas fa-chevron-down dropdown-arrow" alt="Desplegable Icon">
             </div>
             <div class="category-content" id="sandwiches-content">
                 <div class="menu-item">
-                    <span class="item-name">De la Casa</span>
+                    <span class="item-name">Sandwich De la Casa</span>
                     <span class="item-price">$10.900</span>
                     <button class="add-to-cart-btn" data-name="Sandwich De la Casa" data-price="10900"><i class="fas fa-plus"></i></button>
                     <p class="item-description">Carne de Res, Tocineta, Cerdo, Pollo, Jamón de cordero, Queso Doble Crema, Pan Baguette 20cm.</p>
                 </div>
+                
             </div>
             
             <div class="category-toggle active" data-category="twister">
                 <div class="category-icon-wrapper">
-                    <i class="fas fa-utensils category-icon"></i> </div>
-                <span class="category-name">Twister</span>
-                <i class="fas fa-chevron-up dropdown-arrow"></i> </div>
+                    <img src="/img/logo_hambuergesa.png" alt="Hamburguesa Icon" class="logo-products">
+                </div> <span class="category-name">Twister</span>
+                    <img src="img/desplegable.png" class="fas fa-chevron-down dropdown-arrow" alt="Desplegable Icon">    
+                </div>
             <div class="category-content active" id="twister-content">
                 <div class="menu-item">
                     <span class="item-name">NUEVO - Twister</span>
@@ -74,9 +82,10 @@
 
             <div class="category-toggle" data-category="choriperro">
                 <div class="category-icon-wrapper">
-                    <i class="fas fa-hotdog category-icon"></i> </div>
-                <span class="category-name">Choriperro</span>
-                <i class="fas fa-chevron-down dropdown-arrow"></i>
+                    <img src="/img/logo_choriperro.png" alt="Hamburguesa Icon" class="logo-products">
+                </div><span class="category-name">Choriperro</span>
+                    <img src="img/desplegable.png" class="fas fa-chevron-down dropdown-arrow" alt="Desplegable Icon">
+                </div>
             </div>
             <div class="category-content" id="choriperro-content">
                 <div class="menu-item">
@@ -95,8 +104,8 @@
                 <div class="category-icon-wrapper">
                     <i class="fas fa-corn category-icon"></i> </div>
                 <span class="category-name">Mazorcadas</span>
-                <i class="fas fa-chevron-down dropdown-arrow"></i>
-            </div>
+                <img src="img/desplegable.png" class="fas fa-chevron-down dropdown-arrow" alt="Desplegable Icon">
+                </div>
             <div class="category-content" id="mazorcadas-content">
                 <div class="menu-item">
                     <span class="item-name">ESPECIAL Mazorcada</span>
@@ -109,8 +118,9 @@
             <div class="category-toggle" data-category="panzerottis">
                 <div class="category-icon-wrapper">
                     <i class="fas fa-pizza-slice category-icon"></i> </div>
-                <span class="category-name">Panzerottis</span>
-                <i class="fas fa-chevron-down dropdown-arrow"></i>
+                    <span class="category-name">Panzerottis</span>
+                    <img src="img/desplegable.png" class="fas fa-chevron-down dropdown-arrow" alt="Desplegable Icon">
+                </div>
             </div>
             <div class="category-content" id="panzerottis-content">
                 <div class="menu-item">
@@ -134,7 +144,8 @@
                 <div class="category-icon-wrapper">
                     <i class="fas fa-plus-circle category-icon"></i> </div>
                 <span class="category-name">Adicionales</span>
-                <i class="fas fa-chevron-down dropdown-arrow"></i>
+                <img src="img/desplegable.png" class="fas fa-chevron-down dropdown-arrow" alt="Desplegable Icon">
+                </div>
             </div>
             <div class="category-content" id="adicionales-content">
                 <div class="menu-item">
@@ -168,7 +179,8 @@
                 <div class="category-icon-wrapper">
                     <i class="fas fa-wine-glass category-icon"></i> </div>
                 <span class="category-name">Bebidas</span>
-                <i class="fas fa-chevron-down dropdown-arrow"></i>
+                <img src="img/desplegable.png" class="fas fa-chevron-down dropdown-arrow" alt="Desplegable Icon">
+                </div>
             </div>
             <div class="category-content" id="bebidas-content">
                 <div class="menu-item">
