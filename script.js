@@ -8,7 +8,23 @@ document.addEventListener('DOMContentLoaded', () => {
     const modalCartTotalSpan = document.getElementById('modal-cart-total');
     const cartItemCountSpan = document.getElementById('cart-item-count');
     const clearModalCartButton = document.getElementById('clear-modal-cart');
-    const checkoutModalButton = document.getElementById('checkout-modal-btn');
+    const whatsappCheckoutButton = document.getElementById('whatsapp-checkout-btn'); // Renamed ID
+
+    // New modal 2 elements (payment options)
+    const cartModal2 = document.getElementById('cart-modal_2');
+    const closeButton2 = document.querySelector('.close-button_2');
+    const modalCartTotalSpan2 = document.getElementById('modal-cart-total_2');
+    const nequiBtn = document.getElementById('nequi-btn');
+    const daviplataBtn = document.getElementById('daviplata-btn');
+    const efectivoBtn = document.getElementById('efectivo-btn');
+
+    // New modal 3 elements (cash payment)
+    const cartModal3 = document.getElementById('cart-modal_3');
+    const closeButton3 = document.querySelector('.close-button_3');
+    const modalCartTotalSpan3 = document.getElementById('modal-cart-total_3');
+    const billAmountInput = document.getElementById('bill-amount');
+    const changeAmountSpan = document.getElementById('change-amount');
+    const confirmCashBtn = document.getElementById('confirm-cash-btn');
 
     let cart = []; // Array to store cart items
 
@@ -17,8 +33,10 @@ document.addEventListener('DOMContentLoaded', () => {
     function showToast(message) {
         let toast = document.getElementById('toast');
         if (!toast) {
-            console.error("El elemento #toast no se encontró en el DOM.");
-            return;
+            // Create toast element if it doesn't exist
+            toast = document.createElement('div');
+            toast.id = 'toast';
+            document.body.appendChild(toast);
         }
         toast.textContent = message;
         toast.classList.add('show');
@@ -29,6 +47,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function formatPrice(price) {
         return `$${price.toLocaleString('es-CO')}`;
+    }
+
+    function calculateCartTotal() {
+        return cart.reduce((total, item) => total + (item.price * item.quantity), 0);
     }
 
     function updateCartDisplay() {
@@ -58,6 +80,12 @@ document.addEventListener('DOMContentLoaded', () => {
         cartItemCountSpan.textContent = itemCount;
         cartItemCountSpan.style.display = itemCount > 0 ? 'flex' : 'none'; // Show/hide badge
 
+        // Update the total in the second modal as well
+        modalCartTotalSpan2.textContent = formatPrice(total);
+        // Update the total in the third modal as well
+        modalCartTotalSpan3.textContent = formatPrice(total);
+
+
         // Re-attach event listeners for remove buttons in modal
         document.querySelectorAll('.remove-item-from-modal').forEach(button => {
             button.addEventListener('click', (event) => {
@@ -77,6 +105,30 @@ document.addEventListener('DOMContentLoaded', () => {
             updateCartDisplay();
             showToast('➖ Ítem eliminado del carrito.');
         }
+    }
+
+    function generateWhatsAppMessage(paymentMethod, billAmount = null, change = null) {
+        let whatsappMessage = "¡Hola! Quisiera realizar el siguiente pedido de El Panze: \n\n";
+        let totalOrderPrice = calculateCartTotal();
+
+        cart.forEach(item => {
+            whatsappMessage += `- ${item.name} x${item.quantity} (${formatPrice(item.price * item.quantity)})\n`;
+        });
+
+        whatsappMessage += `\nTotal: ${formatPrice(totalOrderPrice)}\n`;
+        whatsappMessage += `Método de pago elegido: ${paymentMethod}\n`;
+
+        if (paymentMethod === 'EFECTIVO' && billAmount !== null && change !== null) {
+            whatsappMessage += `Monto con el que paga: ${formatPrice(billAmount)}\n`;
+            whatsappMessage += `Cambio a devolver: ${formatPrice(change)}\n`;
+        }
+        
+        whatsappMessage += `\n¡Gracias!`;
+
+        const encodedMessage = encodeURIComponent(whatsappMessage);
+        const phoneNumber = '+57 3107674031'; // Phone number for El Panze
+
+        return `https://wa.me/${phoneNumber}?text=${encodedMessage}`;
     }
 
     // --- Event Listeners ---
@@ -125,59 +177,131 @@ document.addEventListener('DOMContentLoaded', () => {
         updateCartDisplay(); // Ensure cart content is up-to-date when opening
     });
 
-    // Close Modal Button
+    // Close Modal 1 Button
     closeButton.addEventListener('click', () => {
         cartModal.style.display = 'none';
     });
 
-    // Close Modal when clicking outside the content
+    // Close Modal 1 when clicking outside the content
     window.addEventListener('click', (event) => {
         if (event.target === cartModal) {
             cartModal.style.display = 'none';
         }
     });
 
-    // Clear Cart Button in Modal
+    // Clear Cart Button in Modal 1
     clearModalCartButton.addEventListener('click', () => {
         cart = [];
         updateCartDisplay();
         showToast('🗑️ Carrito vaciado.');
     });
 
-    // Checkout Button in Modal (WhatsApp integration)
-    checkoutModalButton.addEventListener('click', () => {
+    // Confirm Order Button (now opens payment modal)
+    whatsappCheckoutButton.addEventListener('click', () => {
         if (cart.length === 0) {
             showToast('Tu carrito está vacío. ¡Añade algo antes de confirmar!');
             return;
         }
-
-        showToast('Generando tu pedido para WhatsApp...');
-
-        setTimeout(() => {
-            let whatsappMessage = "¡Hola! Quisiera realizar el siguiente pedido de El Panze: \n\n";
-            let totalOrderPrice = 0;
-
-            cart.forEach(item => {
-                whatsappMessage += `- ${item.name} x${item.quantity} (${formatPrice(item.price * item.quantity)})\n`;
-                totalOrderPrice += item.price * item.quantity;
-            });
-
-            whatsappMessage += `\nTotal: ${formatPrice(totalOrderPrice)}\n`;
-            whatsappMessage += `\n¡Gracias!`;
-
-            const encodedMessage = encodeURIComponent(whatsappMessage);
-            const phoneNumber = '+57 3107674031'; // Phone number for El Panze
-
-            const whatsappURL = `https://wa.me/${phoneNumber}?text=${encodedMessage}`;
-
-            window.open(whatsappURL, '_blank');
-
-            // Clear cart after sending to WhatsApp
-            cart = [];
-            updateCartDisplay();
-            cartModal.style.display = 'none'; // Close modal after order
-        }, 1500); // Small delay to show toast
+        cartModal.style.display = 'none'; // Close the first modal
+        cartModal2.style.display = 'flex'; // Open the second modal
+        updateCartDisplay(); // Update total in the second modal
     });
+
+    // --- Modal 2 Event Listeners (Payment Options) ---
+
+    // Close Modal 2 Button
+    closeButton2.addEventListener('click', () => {
+        cartModal2.style.display = 'none';
+    });
+
+    // Close Modal 2 when clicking outside the content
+    window.addEventListener('click', (event) => {
+        if (event.target === cartModal2) {
+            cartModal2.style.display = 'none';
+        }
+    });
+
+    // Nequi Button
+    nequiBtn.addEventListener('click', () => {
+        showToast('Has seleccionado NEQUI. Generando pedido...');
+        const whatsappURL = generateWhatsAppMessage('NEQUI');
+        setTimeout(() => {
+            window.open(whatsappURL, '_blank');
+            cart = []; // Clear cart after sending to WhatsApp
+            updateCartDisplay();
+            cartModal2.style.display = 'none'; // Close modal after order
+        }, 1500);
+    });
+
+    // Daviplata Button
+    daviplataBtn.addEventListener('click', () => {
+        showToast('Has seleccionado DAVIPLATA. Generando pedido...');
+        const whatsappURL = generateWhatsAppMessage('DAVIPLATA');
+        setTimeout(() => {
+            window.open(whatsappURL, '_blank');
+            cart = []; // Clear cart after sending to WhatsApp
+            updateCartDisplay();
+            cartModal2.style.display = 'none'; // Close modal after order
+        }, 1500);
+    });
+
+    // Efectivo Button - Opens Modal 3
+    efectivoBtn.addEventListener('click', () => {
+        cartModal2.style.display = 'none'; // Close current modal
+        cartModal3.style.display = 'flex'; // Open the cash modal
+        billAmountInput.value = ''; // Clear previous input
+        changeAmountSpan.textContent = formatPrice(0); // Reset change display
+        modalCartTotalSpan3.textContent = formatPrice(calculateCartTotal()); // Ensure total is updated
+    });
+
+    // --- Modal 3 Event Listeners (Cash Payment) ---
+
+    // Close Modal 3 Button
+    closeButton3.addEventListener('click', () => {
+        cartModal3.style.display = 'none';
+    });
+
+    // Close Modal 3 when clicking outside the content
+    window.addEventListener('click', (event) => {
+        if (event.target === cartModal3) {
+            cartModal3.style.display = 'none';
+        }
+    });
+
+    // Calculate change as user types
+    billAmountInput.addEventListener('input', () => {
+        const billAmount = parseFloat(billAmountInput.value);
+        const total = calculateCartTotal();
+        let change = 0;
+
+        if (!isNaN(billAmount) && billAmount >= total) {
+            change = billAmount - total;
+        }
+        changeAmountSpan.textContent = formatPrice(change);
+    });
+
+    // Confirm Cash Button
+    confirmCashBtn.addEventListener('click', () => {
+        const billAmount = parseFloat(billAmountInput.value);
+        const total = calculateCartTotal();
+
+        if (isNaN(billAmount) || billAmount < total) {
+            showToast('Por favor, ingresa un monto válido igual o mayor al total.');
+            return;
+        }
+
+        const change = billAmount - total;
+        showToast(`Pago en EFECTIVO. Cambio: ${formatPrice(change)}. Generando pedido...`);
+        const whatsappURL = generateWhatsAppMessage('EFECTIVO', billAmount, change);
+        
+        setTimeout(() => {
+            window.open(whatsappURL, '_blank');
+            cart = []; // Clear cart after sending to WhatsApp
+            updateCartDisplay();
+            cartModal3.style.display = 'none'; // Close modal after order
+        }, 1500);
+    });
+
 
     // Initial display update
     updateCartDisplay();

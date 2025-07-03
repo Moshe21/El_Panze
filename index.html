@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8">
@@ -22,9 +23,7 @@
                 <div class="category-icon-wrapper">
                     <img src="/img/logo_hambuergesa.png" alt="Hamburguesa Icon" class="logo-products">
                 </div>
-                <!--<span class="category-name">Hamburguesas</span>-->
                 <span class="category-name">Hamburguesas</span>
-                <!--<span <img src =img/text_hamburguesa.png alt="Hamburguesas Text" class="text_products">-->
                 <img src="img/desplegable.png" class="fas fa-chevron-down dropdown-arrow" alt="Desplegable Icon">
             </div>
             <div class="category-content" id="hamburguesas-content">
@@ -212,12 +211,38 @@
             <p class="cart-summary">Total: <span id="modal-cart-total">$0</span></p>
             <div class="modal-actions">
                 <button id="clear-modal-cart" class="modal-btn secondary">Vaciar Pedido</button>
-                <button id="checkout-modal-btn" class="modal-btn primary">Confirmar Pedido</button>
+                <button id="whatsapp-checkout-btn" class="modal-btn primary">Confirmar Pedido</button>
             </div>
         </div>
     </div>
 
-   
+    <div id="cart-modal_2" class="modal_2">
+        <div class="modal-content">
+            <span class="close-button_2">&times;</span>
+            <h2 class="modal-title">¿Cómo deseas pagar?</h2>
+            <p class="cart-summary">Total: <span id="modal-cart-total_2">$0</span></p> <div class="modal-actions">
+                <button id="nequi-btn" class="modal-btn nequi">NEQUI</button>
+                <button id="daviplata-btn" class="modal-btn daviplata ">DAVIPLATA</button>
+                <button id="efectivo-btn" class="modal-btn tertiary">EFECTIVO</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="cart-modal_3" class="modal_3">
+        <div class="modal-content">
+            <span class="close-button_3">&times;</span>
+            <h2 class="modal-title">Pago en Efectivo</h2>
+            <p class="cart-summary">Total a pagar: <span id="modal-cart-total_3">$0</span></p>
+            <div class="cash-input-group">
+                <label for="bill-amount">¿Con cuánto vas a pagar?</label>
+                <input type="number" id="bill-amount" placeholder="Ej: 20000" min="0">
+            </div>
+            <p class="cart-summary">Tu cambio: <span id="change-amount">$0</span></p>
+            <div class="modal-actions">
+                <button id="confirm-cash-btn" class="modal-btn primary">Confirmar Pago</button>
+            </div>
+        </div>
+    </div>
 
     <script src="script.js"></script>
 </body>
