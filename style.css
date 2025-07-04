@@ -33,7 +33,8 @@ body {
     background-repeat: no-repeat;
     background-position: center center;
     color: var(--color-text-dark);
-    display: flex;
+    display: block;
+        
     flex-direction: column;
     min-height: 100vh;
     overflow-x: hidden; /* Prevent horizontal scroll */
@@ -50,7 +51,13 @@ header {
     position: relative;
     z-index: 10; /* Above other content */
 }
-
+.menu-categories {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 20px 0;
+}
 .welcome-text {
     font-family: 'Italianno'; /* Elegant script font */
     font-size: 5em;
@@ -60,7 +67,7 @@ header {
 
 .menu-title {
     font-family: 'Lobster', cursive; /* Bold, rounded font for "Menú" */
-    font-size: 3.5em;
+    font-size: .5em;
     margin: -10px 0 0; /* Adjust vertical position */
     color: var(--color-text-dark); /* Dark text for "Menú" */
     text-shadow: 
@@ -100,12 +107,14 @@ main {
     padding: 12px 20px;
     margin-bottom: 15px;
     display: flex;
-    align-items: center;
-    justify-content: space-between;
+    flex-direction:row;
+    align-items: ;
+    justify-content: flex-end;;
     cursor: pointer;
     box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
     transition: all 0.3s ease;
     border: 2px solid var(--color-border-dark);
+    max-width: 100%; /* Ensure it doesn't overflow */
 }
 
 /* Specific category colors */
@@ -158,14 +167,14 @@ main {
 
 .category-name {
     font-family: 'Italianno', cursive; /* Same as Menu title for consistency */
-    font-size: 3.6em;
+    font-size: 4.6em;
     flex-grow: 1; /* Allows name to take available space */
     text-align: left;
     border-radius: 10%;
     text-shadow: 2px 2px 10px rgba(0, 0, 0, 0.5);
     padding-right: 1px; /* Space before arrow */;
     transition: color 0.3s ease;   
-    
+    max-width: 100%;
   -webkit-text-stroke: 2px black; /* Ancho de 2px, color negro */
   color: rgb(0, 0, 0); /* Color del texto */
 
