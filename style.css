@@ -115,7 +115,7 @@ main {
     margin-bottom: 15px;
     display: flex;
     flex-direction:row;
-    align-items: ;
+    align-items: 10PX;
     justify-content: flex-end;;
     cursor: pointer;
     box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
@@ -123,7 +123,11 @@ main {
     border: 2px solid var(--color-border-dark);
     max-width: 100%; /* Ensure it doesn't overflow */
 }
-
+#desplegable{
+    width: 20%;
+    height: 10%;
+    margin-left: 1px;
+}
 /* Specific category colors */
 .category-toggle[data-category="sandwiches"] {
     background-color: var(--color-accent-orange);
@@ -142,8 +146,8 @@ main {
 .category-icon-wrapper {
     background-color: var(--color-light-gray);
     border-radius: 50%;
-    width: 100px;
-    height: 100px;
+    width: 50px;
+    height: 50px;
     display: flex;
     justify-content: center;
     align-items: center;
@@ -174,7 +178,7 @@ main {
 
 .category-name {
     font-family: 'Italianno', cursive; /* Same as Menu title for consistency */
-    font-size: 300%;
+    font-size: 200%;
     flex-grow: 1; /* Allows name to take available space */
     text-align: left;
     border-radius: 10%;
@@ -188,7 +192,7 @@ main {
 }
 
 .dropdown-arrow {
-    size: 50%;
+    size: 100%;
     direction: right;
     transition: transform 0.3s ease;
 }
