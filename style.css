@@ -174,7 +174,7 @@ main {
 
 .category-name {
     font-family: 'Italianno', cursive; /* Same as Menu title for consistency */
-    font-size: 450%;
+    font-size: 300%;
     flex-grow: 1; /* Allows name to take available space */
     text-align: left;
     border-radius: 10%;
