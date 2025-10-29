@@ -1,0 +1,269 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>El Panze - Menú Digital</title>
+
+  <!-- Fuentes -->
+  <link href="https://fonts.googleapis.com/css2?family=Lobster&family=Italianno&family=Roboto:wght@400;700&display=swap" rel="stylesheet">
+
+  <!-- Estilos -->
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header class="site-header">
+    <div class="header-inner">
+      <div class="logo">El Panze</div>
+      <div class="header-text">
+        <h1 class="welcome-text">Bienvenido</h1>
+        <div class="phone">Domicilios: <strong class="phone-main">+57 310 767 4031</strong></div>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <section id="menu-categories" class="menu-categories">
+      <!-- Cada bloque category-toggle + category-content -->
+      <div class="category-toggle" data-category="hamburguesas">
+        <div class="category-icon-wrapper"><img src="img/logo_hambuergesa.png" alt="" class="icon-img"></div>
+        <span class="category-name">Hamburguesas</span>
+        <span class="dropdown-arrow">▾</span>
+      </div>
+      <div id="hamburguesas-content" class="category-content">
+        <div class="menu-item">
+          <div>
+            <div class="item-name">ESPECIAL</div>
+            <div class="item-description">125gr Carne 100% res, Tocineta, Queso, Papita Chips</div>
+          </div>
+          <div class="item-actions">
+            <div class="item-price">$9.900</div>
+            <button class="add-to-cart-btn" data-name="Hamburguesa Especial" data-price="9900">＋</button>
+          </div>
+        </div>
+
+        <div class="menu-item">
+          <div>
+            <div class="item-name">Pechuga de pollo</div>
+            <div class="item-description">125gr Pechuga, Tocineta, Vegetales, Queso</div>
+          </div>
+          <div class="item-actions">
+            <div class="item-price">$11.900</div>
+            <button class="add-to-cart-btn" data-name="Hamburguesa Pechuga Pollo" data-price="11900">＋</button>
+          </div>
+        </div>
+
+        <div class="menu-item">
+          <div>
+            <div class="item-name">Doble Carne</div>
+            <div class="item-description">2 porciones de 125gr, Tocineta, Queso</div>
+          </div>
+          <div class="item-actions">
+            <div class="item-price">$15.900</div>
+            <button class="add-to-cart-btn" data-name="Hamburguesa Doble Carne" data-price="15900">＋</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="category-toggle" data-category="sandwiches">
+        <div class="category-icon-wrapper"><img src="img/logo_sandwich.png" alt="" class="icon-img"></div>
+        <span class="category-name">Sandwichs</span>
+        <span class="dropdown-arrow">▾</span>
+      </div>
+      <div id="sandwiches-content" class="category-content">
+        <div class="menu-item">
+          <div>
+            <div class="item-name">De la Casa (20cm)</div>
+            <div class="item-description">Carne, Tocineta, Jamón cordero, Queso doble crema</div>
+          </div>
+          <div class="item-actions">
+            <div class="item-price">$11.900</div>
+            <button class="add-to-cart-btn" data-name="Sandwich De la Casa" data-price="11900">＋</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="category-toggle" data-category="twister">
+        <div class="category-icon-wrapper"><img src="img/logo_twister.png" alt="" class="icon-img"></div>
+        <span class="category-name">Twister</span>
+        <span class="dropdown-arrow">▾</span>
+      </div>
+      <div id="twister-content" class="category-content">
+        <div class="menu-item">
+          <div>
+            <div class="item-name">Twister</div>
+            <div class="item-description">125gr Pechuga, Lechuga, Tomate, Queso Doble crema</div>
+          </div>
+          <div class="item-actions">
+            <div class="item-price">$11.900</div>
+            <button class="add-to-cart-btn" data-name="Twister" data-price="11900">＋</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="category-toggle" data-category="choriperro">
+        <div class="category-icon-wrapper"><img src="img/logo_choriperro.png" alt="" class="icon-img"></div>
+        <span class="category-name">Choriperro</span>
+        <span class="dropdown-arrow">▾</span>
+      </div>
+      <div id="choriperro-content" class="category-content">
+        <div class="menu-item">
+          <div>
+            <div class="item-name">Choriperro</div>
+          </div>
+          <div class="item-actions">
+            <div class="item-price">$6.500</div>
+            <button class="add-to-cart-btn" data-name="Choriperro" data-price="6500">＋</button>
+          </div>
+        </div>
+        <div class="menu-item">
+          <div>
+            <div class="item-name">Choriperro Especial</div>
+          </div>
+          <div class="item-actions">
+            <div class="item-price">$9.000</div>
+            <button class="add-to-cart-btn" data-name="Choriperro Especial" data-price="9000">＋</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="category-toggle" data-category="mazorcadas">
+        <div class="category-icon-wrapper"><img src="img/logo_mazorcada.png" alt="" class="icon-img"></div>
+        <span class="category-name">Mazorcas</span>
+        <span class="dropdown-arrow">▾</span>
+      </div>
+      <div id="mazorcadas-content" class="category-content">
+        <div class="menu-item">
+          <div>
+            <div class="item-name">Mazorcas Especial</div>
+            <div class="item-description">200gr Maíz tierno, Tocineta, Carnes y Queso gratinado</div>
+          </div>
+          <div class="item-actions">
+            <div class="item-price">$15.900</div>
+            <button class="add-to-cart-btn" data-name="Mazorcas Especial" data-price="15900">＋</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="category-toggle" data-category="panzerottis">
+        <div class="category-icon-wrapper"><img src="img/logo_panzerotti.png" alt="" class="icon-img"></div>
+        <span class="category-name">Panzerottis</span>
+        <span class="dropdown-arrow">▾</span>
+      </div>
+      <div id="panzerottis-content" class="category-content">
+        <div class="menu-item">
+          <div>
+            <div class="item-name">Ranchero</div>
+          </div>
+          <div class="item-actions">
+            <div class="item-price">$3.500</div>
+            <button class="add-to-cart-btn" data-name="Panzerotti Ranchero" data-price="3500">＋</button>
+          </div>
+        </div>
+        <div class="menu-item">
+          <div>
+            <div class="item-name">Pollo con Champiñones</div>
+          </div>
+          <div class="item-actions">
+            <div class="item-price">$3.500</div>
+            <button class="add-to-cart-btn" data-name="Panzerotti Pollo Champiñones" data-price="3500">＋</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="category-toggle" data-category="adicionales">
+        <div class="category-icon-wrapper"><img src="img/logo_adicionales.png" alt="" class="icon-img"></div>
+        <span class="category-name">Adicionales</span>
+        <span class="dropdown-arrow">▾</span>
+      </div>
+      <div id="adicionales-content" class="category-content">
+        <div class="menu-item">
+          <div class="item-name">Queso</div>
+          <div class="item-actions">
+            <div class="item-price">$1.500</div>
+            <button class="add-to-cart-btn" data-name="Adicional Queso" data-price="1500">＋</button>
+          </div>
+        </div>
+        <div class="menu-item">
+          <div class="item-name">Papa a la francesa</div>
+          <div class="item-actions">
+            <div class="item-price">$4.000</div>
+            <button class="add-to-cart-btn" data-name="Adicional Papa Francesa" data-price="4000">＋</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="category-toggle" data-category="bebidas">
+        <div class="category-icon-wrapper"><img src="img/logo_bebidas.png" alt="" class="icon-img"></div>
+        <span class="category-name">Bebidas</span>
+        <span class="dropdown-arrow">▾</span>
+      </div>
+      <div id="bebidas-content" class="category-content">
+        <div class="menu-item">
+          <div class="item-name">Coca-Cola</div>
+          <div class="item-actions">
+            <div class="item-price">$3.500</div>
+            <button class="add-to-cart-btn" data-name="Coca-Cola" data-price="3500">＋</button>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Botón flotante carrito -->
+  <button id="floating-cart-btn" aria-label="Carrito">
+    🛒 <span id="cart-item-count" class="cart-count">0</span>
+  </button>
+
+  <!-- Modal 1: carrito -->
+  <div id="cart-modal" class="modal" role="dialog" aria-hidden="true">
+    <div class="modal-content">
+      <button class="close-button" aria-label="Cerrar">✕</button>
+      <h2 class="modal-title">Tu Pedido</h2>
+      <ul id="modal-cart-list"></ul>
+      <p class="cart-summary">Total: <span id="modal-cart-total">$0</span></p>
+      <div class="modal-actions">
+        <button id="clear-modal-cart" class="modal-btn secondary">Vaciar Pedido</button>
+        <button id="whatsapp-checkout-btn" class="modal-btn primary">Confirmar Pedido</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal 2: opciones de pago -->
+  <div id="cart-modal_2" class="modal" role="dialog" aria-hidden="true">
+    <div class="modal-content">
+      <button class="close-button_2" aria-label="Cerrar">✕</button>
+      <h2 class="modal-title">¿Cómo deseas pagar?</h2>
+      <p class="cart-summary">Total: <span id="modal-cart-total_2">$0</span></p>
+      <div class="modal-actions">
+        <button id="nequi-btn" class="modal-btn nequi">NEQUI</button>
+        <button id="daviplata-btn" class="modal-btn daviplata">DAVIPLATA</button>
+        <button id="efectivo-btn" class="modal-btn tertiary">EFECTIVO</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal 3: efectivo -->
+  <div id="cart-modal_3" class="modal" role="dialog" aria-hidden="true">
+    <div class="modal-content">
+      <button class="close-button_3" aria-label="Cerrar">✕</button>
+      <h2 class="modal-title">Pago en Efectivo</h2>
+      <p class="cart-summary">Total a pagar: <span id="modal-cart-total_3">$0</span></p>
+      <div class="cash-input-group">
+        <label for="bill-amount">¿Con cuánto vas a pagar?</label>
+        <input type="number" id="bill-amount" placeholder="Ej: 20000" min="0" />
+      </div>
+      <p class="cart-summary">Tu cambio: <span id="change-amount">$0</span></p>
+      <div class="modal-actions">
+        <button id="confirm-cash-btn" class="modal-btn primary">Confirmar Pago</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast -->
+  <div id="toast" class="toast" aria-hidden="true"></div>
+
+  <!-- Scripts -->
+  <script src="script.js"></script>
+</body>
+</html>

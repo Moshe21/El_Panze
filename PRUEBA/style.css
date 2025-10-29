@@ -1,0 +1,109 @@
+:root{
+  /* Paleta solicitada */
+  --mustard: #f2b21c;
+  --wine: #6a0000;
+  --wood: #ead4b5;
+  --dark: #35363a;
+  --gold: #ae8a36;
+  --orange: #eb7827;
+  --brown: #944c3e;
+  --olive: #becb9b;
+
+  --white: #ffffff;
+  --muted: rgba(0,0,0,0.06);
+}
+
+/* Reset ligero */
+*{box-sizing:border-box}
+html,body{height:100%;margin:0;font-family:Roboto, system-ui, -apple-system, 'Segoe UI', sans-serif;background:var(--wood);color:var(--dark);-webkit-font-smoothing:antialiased}
+
+/* Header */
+.site-header{background:linear-gradient(90deg,var(--gold), rgba(174,138,54,0.85));padding:18px 12px;border-bottom:4px solid rgba(0,0,0,0.08)}
+.header-inner{max-width:980px;margin:0 auto;display:flex;align-items:center;gap:16px}
+.logo{font-family:Lobster, cursive;font-size:34px;color:var(--wine);padding:8px 12px;border-radius:10px;background:rgba(255,255,255,0.12);box-shadow:0 4px 12px rgba(0,0,0,0.08)}
+.header-text .welcome-text{margin:0;font-family:Italianno, cursive;font-size:28px;color:var(--brown)}
+.header-text .phone{font-size:13px;color:var(--dark)}
+
+/* Layout principal: mobile-first */
+main{max-width:980px;margin:18px auto;padding:0 12px}
+
+/* Categoria (toggle) */
+.category-toggle{
+  display:flex;align-items:center;gap:12px;
+  background:linear-gradient(90deg,var(--mustard), var(--orange));
+  padding:12px;border-radius:999px;border:3px solid var(--wine);
+  margin-bottom:14px;cursor:pointer;box-shadow:0 6px 12px rgba(0,0,0,0.12);
+}
+.category-toggle .category-icon-wrapper{width:72px;height:72px;border-radius:50%;background:var(--white);display:flex;align-items:center;justify-content:center;border:3px solid rgba(0,0,0,0.06)}
+.category-toggle .icon-img{max-width:62px;height:auto}
+.category-name{font-family:Italianno, cursive;font-size:28px;color:var(--wine);flex:1;text-shadow:0 1px 0 rgba(255,255,255,0.2);padding-left:6px}
+.dropdown-arrow{font-size:22px;color:var(--dark);background:var(--white);width:44px;height:44px;border-radius:50%;display:flex;align-items:center;justify-content:center;border:3px solid rgba(0,0,0,0.06)}
+
+/* Contenido colapsable */
+.category-content{
+  background: rgba(148,76,62,0.06);
+  border-radius:0 0 18px 18px;
+  margin-bottom:14px;
+  padding:0;
+  max-height:0;overflow:hidden;transition:max-height .42s ease,padding .3s ease;
+}
+.category-content.active{padding:14px;max-height:1000px}
+
+/* Item */
+.menu-item{display:flex;justify-content:space-between;align-items:center;padding:10px 6px;border-bottom:1px dashed rgba(0,0,0,0.06)}
+.item-name{font-weight:700;color:var(--wine)}
+.item-description{font-size:13px;color:#5a4a4a;margin-top:6px}
+.item-actions{display:flex;align-items:center;gap:10px}
+.item-price{font-weight:800;color:var(--wine);min-width:80px;text-align:right}
+
+/* Boton + */
+.add-to-cart-btn{
+  background:var(--olive);
+  color:var(--white);
+  border:0;border-radius:50%;
+  width:42px;height:42px;font-size:20px;line-height:1;cursor:pointer;box-shadow:0 6px 10px rgba(0,0,0,0.14)
+}
+.add-to-cart-btn:hover{transform:translateY(-3px);transition:transform .15s}
+
+/* Boton flotante carrito */
+#floating-cart-btn{
+  position:fixed;bottom:92px;right:18px;border-radius:50%;
+  width:72px;height:72px;background:linear-gradient(180deg,var(--mustard),var(--orange));
+  border:4px solid var(--wine);box-shadow:0 10px 20px rgba(0,0,0,0.2);font-size:28px;display:flex;align-items:center;justify-content:center;z-index:40;cursor:pointer
+}
+.cart-count{position:absolute;top:-8px;right:-8px;background:var(--wine);color:var(--white);padding:6px 9px;border-radius:50%;font-weight:700;border:2px solid var(--white);font-size:13px;}
+
+/* Modal (reusable) */
+.modal{display:none;position:fixed;left:0;top:0;width:100%;height:100%;background:rgba(0,0,0,0.6);align-items:center;justify-content:center;z-index:80}
+.modal .modal-content{background:var(--white);width:92%;max-width:520px;border-radius:10px;padding:16px;border:3px solid rgba(0,0,0,0.06);box-shadow:0 12px 30px rgba(0,0,0,0.25)}
+.close-button, .close-button_2, .close-button_3{position:absolute;right:10px;top:8px;background:transparent;border:0;font-size:18px;cursor:pointer}
+.modal-title{font-family:Lobster,cursive;font-size:24px;color:var(--wine);text-align:center;margin:4px 0 10px}
+
+/* Lista carrito */
+#modal-cart-list{list-style:none;padding:0;max-height:300px;overflow:auto;margin:0 0 12px}
+#modal-cart-list li{display:flex;justify-content:space-between;align-items:center;padding:8px 6px;border-bottom:1px dashed rgba(0,0,0,0.06)}
+.remove-item-from-modal{background:var(--wine);color:var(--white);border:0;border-radius:50%;width:28px;height:28px;cursor:pointer}
+
+/* Acciones modal */
+.modal-actions{display:flex;gap:12px}
+.modal-btn{flex:1;padding:10px;border-radius:8px;border:0;cursor:pointer;font-weight:700}
+.modal-btn.primary{background:var(--mustard);color:var(--wine);border:2px solid var(--wine)}
+.modal-btn.secondary{background:var(--brown);color:var(--white)}
+.modal-btn.nequi{background:#5e0d3a;color:#fff}
+.modal-btn.daviplata{background:#c81b24;color:#fff}
+.modal-btn.tertiary{background:var(--olive);color:#fff}
+
+/* Inputs */
+.cash-input-group input{padding:10px;border-radius:6px;border:2px solid rgba(0,0,0,0.08);width:60%;display:block;margin:8px auto}
+
+/* Toast */
+#toast{position:fixed;left:50%;transform:translateX(-50%);bottom:160px;background:var(--dark);color:white;padding:12px 18px;border-radius:8px;opacity:0;pointer-events:none;transition:opacity .25s}
+#toast.show{opacity:1;pointer-events:auto}
+
+/* Responsive */
+@media(min-width:900px){
+  .header-inner{padding:0 12px}
+  .category-toggle{padding:14px 18px}
+  .category-name{font-size:34px}
+  .icon-img{max-width:72px}
+}

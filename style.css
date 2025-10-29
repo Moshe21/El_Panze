@@ -12,6 +12,8 @@
     --color-light-gray: #f9f9f9; /* For item backgrounds */
     --color-border-dark: #4a2c0f; /* Dark brown border */
     --color-white: #ffffff; /* Explicit white */
+    --color-olive: #becb9b;
+    --color-wine: #6a0000;
 }
 
 /* Base Styles */
@@ -51,6 +53,11 @@ header {
     position: relative;
     z-index: 10; /* Above other content */
 }
+.header-inner{max-width:980px;margin:0 auto;display:flex;align-items:center;gap:16px}
+.logo{font-family:Lobster, cursive;font-size:34px;color:var(--wine);padding:8px 12px;border-radius:10px;background:rgba(255,255,255,0.12);box-shadow:0 4px 12px rgba(0,0,0,0.08)}
+.header-text .welcome-text{margin:0;font-family:Italianno, cursive;font-size:28px;color:var(--brown)}
+.header-text .phone{font-size:13px;color:var(--dark)}
+
 .menu-categories {
     display: flex;
     flex-direction: column;
@@ -167,7 +174,7 @@ main {
 
 .category-name {
     font-family: 'Italianno', cursive; /* Same as Menu title for consistency */
-    font-size: 4.6em;
+    font-size: 450%;
     flex-grow: 1; /* Allows name to take available space */
     text-align: left;
     border-radius: 10%;
@@ -191,18 +198,25 @@ main {
 }
 
 /* Collapsible Content */
-.category-content {
-    background-color: rgba(255, 255, 255, 0.85); /* Slightly transparent white for content */
-    border: 2px solid var(--color-border-dark);
-    border-top: none; /* No top border, blends with toggle */
-    border-bottom-left-radius: 10px;
-    border-bottom-right-radius: 10px;
-    padding: -10px;
-    max-height: 0; /* Hidden by default */
-    overflow: hidden;
-    transition: max-height 0.5s ease-out, padding 0.5s ease-out; /* Smooth transition */
-    margin-bottom: 15px; /* Margin below content when closed or open */
+
+/* Categoria (toggle) */
+
+/* Contenido colapsable */
+.category-content{
+  background: rgba(148,76,62,0.06);
+  border-radius:0 0 18px 18px;
+  margin-bottom:14px;
+  padding:0;
+  max-height:0;overflow:hidden;transition:max-height .42s ease,padding .3s ease;
 }
+.category-content.active{padding:14px;max-height:1000px}
+
+/* Item */
+.menu-item{display:flex;justify-content:space-between;align-items:center;padding:10px 6px;border-bottom:1px dashed rgba(0,0,0,0.06)}
+.item-name{font-weight:700;color:var(--wine)}
+.item-description{font-size:13px;color:#5a4a4a;margin-top:6px}
+.item-actions{display:flex;align-items:center;gap:10px}
+.item-price{font-weight:800;color:var(--wine);min-width:80px;text-align:right}
 
 .category-content.active {
     max-height: 500px; /* Max height to allow content to show. Adjust if content is longer */
@@ -227,7 +241,7 @@ main {
     font-family: 'Roboto', sans-serif;
     font-size: 1.1em;
     font-weight: 700;
-    color: var(--color-text-dark);
+    color: var(--color-wine);
     flex-basis: 60%; /* Take more space */
 }
 
@@ -235,13 +249,13 @@ main {
     font-family: 'Roboto', sans-serif;
     font-size: 1.1em;
     font-weight: 700;
-    color: var(--color-accent-red); /* Red for prices */
+    color: var(--color-wine); /* Red for prices */
     margin-left: auto; /* Push price to the right */
     white-space: nowrap; /* Prevent price from wrapping */
 }
 
 .add-to-cart-btn {
-    background-color: var(--color-plus-button); /* Green plus button */
+    background-color: var(--color-olive); /* Green plus button */
     color: var(--color-white);
     border: none;
     border-radius: 50%;
