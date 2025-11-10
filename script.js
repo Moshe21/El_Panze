@@ -10,6 +10,13 @@ document.addEventListener('DOMContentLoaded', () => {
     const clearModalCartButton = document.getElementById('clear-modal-cart');
     const whatsappCheckoutButton = document.getElementById('whatsapp-checkout-btn'); // Renamed ID
 
+    // Add new modal 1_2 elements
+    const cartModal1_2 = document.getElementById('cart-modal_1_2');
+    const closeButton1_2 = document.querySelector('.close-button_1_2');
+    const modalCartList1_2 = document.getElementById('modal-cart-list_1_2');
+    const modalCartTotalSpan1_2 = document.getElementById('modal-cart-total_1_2');
+    const whatsappCheckoutBtn1_2 = document.getElementById('whatsapp-checkout-btn_1_2');
+
     // New modal 2 elements (payment options)
     const cartModal2 = document.getElementById('cart-modal_2');
     const closeButton2 = document.querySelector('.close-button_2');
@@ -93,6 +100,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 removeItemFromCart(itemIndex);
             });
         });
+
+        // Update modal 1_2 total
+        modalCartTotalSpan1_2.textContent = formatPrice(total);
     }
 
     function removeItemFromCart(index) {
@@ -202,10 +212,11 @@ document.addEventListener('DOMContentLoaded', () => {
             showToast('Tu carrito está vacío. ¡Añade algo antes de confirmar!');
             return;
         }
-        cartModal.style.display = 'none'; // Close the first modal
-        cartModal2.style.display = 'flex'; // Open the second modal
-        updateCartDisplay(); // Update total in the second modal
+        cartModal.style.display = 'none'; // Close first modal
+        cartModal1_2.style.display = 'flex'; // Open modal 1_2
+        updateCartDisplay(); // Update cart display
     });
+    
 
     // --- Modal 2 Event Listeners (Payment Options) ---
 
