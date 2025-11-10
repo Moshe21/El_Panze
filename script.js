@@ -253,6 +253,47 @@ document.addEventListener('DOMContentLoaded', () => {
         updateCartDisplay();
     });
     
+<<<<<<< Updated upstream
+=======
+
+    // --- Modal 1.2 address ---
+    // Close Modal 1_2 Button
+    closeButton1_2.addEventListener('click', () => {
+        cartModal1_2.style.display = 'none';
+    });
+    // Close Modal 1_2 when clicking outside the content
+    window.addEventListener('click', (event) => {
+        if (event.target === cartModal1_2) {
+            cartModal1_2.style.display = 'none';
+        }
+    });
+    // Validate address selection before proceeding
+    document.getElementById("whatsapp-checkout-btn_1_2").addEventListener("click", function () {
+        let direccion = document.getElementById("direccion-select").value;
+        if (!direccion) {
+            showToast('Selecciona una dirección antes de continuar.');
+            return;
+        }
+        showToast('🏢Dirección seleccionada:", direccion');
+    });
+
+    document.getElementById("search-input").addEventListener("keyup", function () {
+        let filter = this.value.toLowerCase();
+        let options = document.getElementById("direccion-select").options;
+        for (let i = 0; i < options.length; i++) {
+            let txt = options[i].text.toLowerCase();
+            options[i].style.display = txt.includes(filter) ? "" : "none";
+        }
+    });
+
+    // whatsappCheckoutBtn1_2 click to go to modal 2
+    whatsappCheckoutBtn1_2.addEventListener('click', () => {
+        cartModal1_2.style.display = 'none'; // Close modal 1_2
+        cartModal2.style.display = 'flex'; // Open modal 2
+        updateCartDisplay();
+    });
+    
+>>>>>>> Stashed changes
     // --- Modal 2 Event Listeners (Payment Options) ---
 
     // Close Modal 2 Button
