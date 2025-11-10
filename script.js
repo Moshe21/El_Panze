@@ -293,6 +293,9 @@ document.addEventListener('DOMContentLoaded', () => {
         updateCartDisplay();
     });
     
+<<<<<<< Updated upstream
+>>>>>>> Stashed changes
+=======
 >>>>>>> Stashed changes
     // --- Modal 2 Event Listeners (Payment Options) ---
 
