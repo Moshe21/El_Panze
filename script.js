@@ -126,7 +126,7 @@ document.addEventListener('DOMContentLoaded', () => {
         whatsappMessage += `\n¡Gracias!`;
 
         const encodedMessage = encodeURIComponent(whatsappMessage);
-        const phoneNumber = '+57 3107674031'; // Phone number for El Panze
+        const phoneNumber = '+57 3142707164'; // Phone number for El Panze
 
         return `https://wa.me/${phoneNumber}?text=${encodedMessage}`;
     }
