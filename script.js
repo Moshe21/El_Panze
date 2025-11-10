@@ -10,15 +10,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const clearModalCartButton = document.getElementById('clear-modal-cart');
     const whatsappCheckoutButton = document.getElementById('whatsapp-checkout-btn'); // Renamed ID
 
-<<<<<<< Updated upstream
-=======
-    // Add new modal 1_2 elements
-    const cartModal1_2 = document.getElementById('cart-modal_1_2');
-    const closeButton1_2 = document.querySelector('.close-button_1_2');
-    const modalCartTotalSpan1_2 = document.getElementById('modal-cart-total_1_2');
-    const whatsappCheckoutBtn1_2 = document.getElementById('whatsapp-checkout-btn_1_2');
-
->>>>>>> Stashed changes
     // New modal 2 elements (payment options)
     const cartModal2 = document.getElementById('cart-modal_2');
     const closeButton2 = document.querySelector('.close-button_2');
@@ -253,8 +244,7 @@ document.addEventListener('DOMContentLoaded', () => {
         updateCartDisplay();
     });
     
-<<<<<<< Updated upstream
-=======
+
 
     // --- Modal 1.2 address ---
     // Close Modal 1_2 Button
@@ -293,13 +283,7 @@ document.addEventListener('DOMContentLoaded', () => {
         updateCartDisplay();
     });
     
-<<<<<<< Updated upstream
-<<<<<<< Updated upstream
->>>>>>> Stashed changes
-=======
->>>>>>> Stashed changes
-=======
->>>>>>> Stashed changes
+
     // --- Modal 2 Event Listeners (Payment Options) ---
 
     // Close Modal 2 Button

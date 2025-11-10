@@ -359,6 +359,29 @@ main {
     justify-content: center;
     align-items: center;
 }
+.select-search-container {
+    display: flex;
+    flex-direction: column;
+    margin: 10px 0;
+}
+
+.select-search-input {
+    padding: 8px;
+    border: 1px solid #bdbdbd;
+    border-radius: 6px;
+    margin-bottom: 5px;
+}
+
+.select-search-list {
+    width: 100%;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    padding: 6px;
+    height: 140px;
+    background: white;
+    cursor: pointer;
+}
+
 
 .modal-content {
     background-color: var(--color-light-gray);
