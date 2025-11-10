@@ -254,6 +254,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     
 
+<<<<<<< Updated upstream
 
     // --- Modal 1.2 address ---
     // Close Modal 1_2 Button
@@ -293,6 +294,8 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     
 
+=======
+>>>>>>> Stashed changes
     // --- Modal 1.2 address ---
     // Close Modal 1_2 Button
     closeButton1_2.addEventListener('click', () => {
