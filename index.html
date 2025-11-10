@@ -232,13 +232,12 @@
     <div id="cart-modal_1_2" class="modal">
         <div class="modal-content">
             <span class="close-button_1_2">&times;</span>
-            <h2 class="modal-title">Dirección</h2>
+            <h2 class="modal-title">Seleccionar Dirección</h2>
             <ul id="modal-cart-list_1_2">
-                <label for="direccion-select" class="modal-title">Seleccionar Dirección</label>
-                <div class="select-search-container">
-                    <input type="text" id="search-input" placeholder="Escribe para buscar..." class="select-search-input">
-                    <select id="direccion-select" size="6" class="select-search-list">
-                        <option>Otro</option>
+                <div class="combo-container">
+                    <input list="direccion-list" id="direccion-combo" placeholder="Escribe o selecciona..." autocomplete="off">
+
+                    <datalist id="direccion-list">
                         <option>Batará</option>
                         <option>Aracari</option>
                         <option>Milano</option>
@@ -291,14 +290,21 @@
                         <option>Torre de San Juan 36B</option>
                         <option>Torre de San Juan 37B</option>
                         <option>Torre de San Juan 38B</option>
-                    </select>
+                    </datalist>
+                </div>
+
+                <div id="direccion-confirmada" style="display:none; text-align:center; margin-top:12px;">
+                    <h1 id="direccion-texto"></h1>
+                    <button id="btn-corregir" class="modal-btn secondary">Corregir</button>
                 </div>
 
             </ul>
             <p class="cart-summary">Total: <span id="modal-cart-total_1_2">$0</span></p>
             <div class="modal-actions">
-                <button id="whatsapp-checkout-btn_1_2" class="modal-btn primary">Confirmar Dirección</button>
-            </div>
+                <button id="whatsapp-checkout-btn_1_2" class="modal-btn primary">
+                    <span class="pin-icon">📍</span> Confirmar Dirección
+                </button>
+                </div>
         </div>
     </div>
 

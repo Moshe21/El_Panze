@@ -15,6 +15,12 @@ document.addEventListener('DOMContentLoaded', () => {
     const closeButton1_2 = document.querySelector('.close-button_1_2');
     const modalCartTotalSpan1_2 = document.getElementById('modal-cart-total_1_2');
     const whatsappCheckoutBtn1_2 = document.getElementById('whatsapp-checkout-btn_1_2');
+    const inputDireccion = document.getElementById("direccion-combo");
+    const vistaDireccion = document.getElementById("direccion-confirmada");
+    const textoDireccion = document.getElementById("direccion-texto");
+    const btnCorregir = document.getElementById("btn-corregir");
+    const checkoutBtn = document.getElementById("whatsapp-checkout-btn_1_2");
+
 
     // New modal 2 elements (payment options)
     const cartModal2 = document.getElementById('cart-modal_2');
@@ -45,9 +51,9 @@ document.addEventListener('DOMContentLoaded', () => {
             document.body.appendChild(toast);
         }
         toast.textContent = message;
-        toast.classList.add('show');
+        toast.classList.add("show", "shake");
         setTimeout(() => {
-            toast.classList.remove('show');
+            toast.classList.remove("show", "shake");
         }, 3000);
     }
 
@@ -56,12 +62,16 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function calculateCartTotal() {
-        return cart.reduce((total, item) => total + (item.price * item.quantity), 0);
-    }
-
+        let total = cart.reduce((total, item) => total + (item.price * item.quantity), 0);
+   
+        return total;
+      }    
+      function cost_domicilio (total){ 
+        total = total+ 3000; 
+         return total;
+      }
     function updateCartDisplay() {
         modalCartList.innerHTML = '';
-        let total = 0;
         let itemCount = 0;
 
         if (cart.length === 0) {
@@ -69,30 +79,35 @@ document.addEventListener('DOMContentLoaded', () => {
             emptyMessageLi.innerHTML = `<span style="font-style: italic; color: #888; text-align: center; width: 100%;">Tu pedido está vacío.</span>`;
             modalCartList.appendChild(emptyMessageLi);
         } else {
+            // Display cart items
             cart.forEach((item, index) => {
                 const li = document.createElement('li');
                 li.innerHTML = `
                     <span>${item.name} (x${item.quantity})</span>
                     <span>${formatPrice(item.price * item.quantity)}</span>
-                    <button class="remove-item-from-modal" data-index="${index}">X</button>
-                `;
+                    <button class="remove-item-from-modal" data-index="${index}">X</button>`;
                 modalCartList.appendChild(li);
-                total += item.price * item.quantity;
                 itemCount += item.quantity;
             });
+
+            // Add delivery charge line if applicable
+            const direccionSelect = document.getElementById('direccion-select');
+           
         }
 
+        const total = calculateCartTotal();
+        
+        // Update all total displays
         modalCartTotalSpan.textContent = formatPrice(total);
-        cartItemCountSpan.textContent = itemCount;
-        cartItemCountSpan.style.display = itemCount > 0 ? 'flex' : 'none'; // Show/hide badge
-
-        // Update the total in the second modal as well
+        modalCartTotalSpan1_2.textContent = formatPrice(total);
         modalCartTotalSpan2.textContent = formatPrice(total);
-        // Update the total in the third modal as well
         modalCartTotalSpan3.textContent = formatPrice(total);
-
-
-        // Re-attach event listeners for remove buttons in modal
+        
+        // Update cart badge
+        cartItemCountSpan.textContent = itemCount;
+        cartItemCountSpan.style.display = itemCount > 0 ? 'flex' : 'none';
+        
+        // Re-attach event listeners for remove buttons
         document.querySelectorAll('.remove-item-from-modal').forEach(button => {
             button.addEventListener('click', (event) => {
                 const itemIndex = parseInt(event.target.dataset.index);
@@ -100,7 +115,6 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         });
     }
-
     function removeItemFromCart(index) {
         if (index > -1 && index < cart.length) {
             if (cart[index].quantity > 1) {
@@ -115,8 +129,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function generateWhatsAppMessage(paymentMethod, billAmount = null, change = null) {
         
-        const direccionSelect = document.getElementById('direccion-select');
-    const direccion = direccionSelect ? direccionSelect.value : 'No especificada';
+        const direccion = document.getElementById("direccion-combo").value;
         
         let whatsappMessage = "¡Hola! Quisiera realizar el siguiente pedido de El Panze: \n\n";
         let totalOrderPrice = calculateCartTotal();
@@ -124,7 +137,7 @@ document.addEventListener('DOMContentLoaded', () => {
         cart.forEach(item => {
             whatsappMessage += `- ${item.name} x${item.quantity} (${formatPrice(item.price * item.quantity)})\n`;
         });
-        whatsappMessage += `\nConjunto / Zona : ${direccion}\n`;
+        whatsappMessage += `\nConjunto / Zona: ${direccion}\n`;
         whatsappMessage += `\nTotal: ${formatPrice(totalOrderPrice)}\n`;
         whatsappMessage += `Método de pago elegido: ${paymentMethod}\n`;
 
@@ -136,7 +149,7 @@ document.addEventListener('DOMContentLoaded', () => {
         whatsappMessage += `\n¡Gracias!`;
 
         const encodedMessage = encodeURIComponent(whatsappMessage);
-        const phoneNumber = '+57 3107674031'; // Phone number for El Panze
+        const phoneNumber = '573107674031'; // Phone number for El Panze
 
         return `https://wa.me/${phoneNumber}?text=${encodedMessage}`;
     }
@@ -177,7 +190,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 cart.push({ name: itemName, price: itemPrice, quantity: 1 });
             }
             updateCartDisplay();
-            showToast('➕ Ítem añadido al carrito!');
+            showToast('➕ ¡Ítem añadido al carrito!');
         });
     });
 
@@ -220,7 +233,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- Modal 1.2 address ---
     // Close Modal 1_2 Button
     closeButton1_2.addEventListener('click', () => {
-        cartModal1_2.style.display = 'none';
+    cartModal1_2.style.display = 'none';
     });
     // Close Modal 1_2 when clicking outside the content
     window.addEventListener('click', (event) => {
@@ -228,39 +241,81 @@ document.addEventListener('DOMContentLoaded', () => {
             cartModal1_2.style.display = 'none';
         }
     });
-    // Validate address selection before proceeding
-    document.getElementById("whatsapp-checkout-btn_1_2").addEventListener("click", function () {
-        let direccion = document.getElementById("direccion-select").value;
-        if (!direccion) {
-            showToast('Selecciona una dirección antes de continuar.');
-            return;
-        }else{
-        showToast('🏢Dirección seleccionada:', +direccion);
-         // whatsappCheckoutBtn1_2 click to go to modal 2
+   
+    const direccionesPermitidas = [
+    "Batará","Aracari","Milano","Ibis","Amazilia","Jilguero","Alondra","Tángara","Andaríos","Frontino",
+    "Sie 1","Sie 2","Sie 3","Sie 4",
+    "Torre de San Juan 1B","Torre de San Juan 2B","Torre de San Juan 3B","Torre de San Juan 4B","Torre de San Juan 5B",
+    "Torre de San Juan 6B","Torre de San Juan 7B","Torre de San Juan 8B","Torre de San Juan 9B","Torre de San Juan 10B",
+    "Torre de San Juan 11B","Torre de San Juan 12B","Torre de San Juan 13B","Torre de San Juan 14B","Torre de San Juan 15B",
+    "Torre de San Juan 16B","Torre de San Juan 17B","Torre de San Juan 18B","Torre de San Juan 19B","Torre de San Juan 20B",
+    "Torre de San Juan 21B","Torre de San Juan 22B","Torre de San Juan 23B","Torre de San Juan 24B","Torre de San Juan 25B",
+    "Torre de San Juan 26B","Torre de San Juan 27B","Torre de San Juan 28B","Torre de San Juan 29B","Torre de San Juan 30B",
+    "Torre de San Juan 31B","Torre de San Juan 32B","Torre de San Juan 33B","Torre de San Juan 34B","Torre de San Juan 35B",
+    "Torre de San Juan 36B","Torre de San Juan 37B","Torre de San Juan 38B"
+    ];
+
+    // desactivar confirmación al inicio
+    checkoutBtn.disabled = true;
+    checkoutBtn.classList.remove("active");
+    
+    // cuando elige dirección
+    inputDireccion.addEventListener("change", () => {
+        const direccion = inputDireccion.value.trim();
+        if (direccion !== "") {
+           
+            const direccion = inputDireccion.value.trim();
+            textoDireccion.textContent = direccion;
+            vistaDireccion.style.display = "block";
+            document.querySelector(".combo-container").style.display = "none";
+
+            checkoutBtn.disabled = false;
+            checkoutBtn.classList.add("active");
+             if (!direccionesPermitidas.includes(direccion)) {
+                showToast('🏢 el costo envío es $3.000 ');
+                cost_domicilio(total);
+                // agregar cargo de envío al total
+                
+            }
             whatsappCheckoutBtn1_2.addEventListener('click', () => {
+                showToast('🏢Dirección seleccionada: ' + direccion);
                 cartModal1_2.style.display = 'none'; // Close modal 1_2
                 cartModal2.style.display = 'flex'; // Open modal 2
                 updateCartDisplay();
             });
+        }     
+    });
+    // Botón corregir → vuelve a mostrar el select
+    btnCorregir.addEventListener("click", () => {
+        vistaDireccion.style.display = "none";
+        document.querySelector(".combo-container").style.display = "block";
+
+        textoDireccion.textContent = direccion;
+            vistaDireccion.style.display = "block";
+            document.querySelector(".combo-container").style.display = "none";
+
+            
+            checkoutBtn.disabled = true;
+            checkoutBtn.classList.remove("active");
+        
+    });
+    // Validación al intentar confirmar sin dirección
+    checkoutBtn.addEventListener("click", function (e) {
+        const direccion = inputDireccion.value.trim();
+
+        if (direccion === "") {
+            e.preventDefault();
+            showToast('🏢 Por favor seleccionar una dirección');
+            return;
         }
     });
-
-    document.getElementById("search-input").addEventListener("keyup", function () {
-        let filter = this.value.toLowerCase();
-        let options = document.getElementById("direccion-select").options;
-        for (let i = 0; i < options.length; i++) {
-            let txt = options[i].text.toLowerCase();
-            options[i].style.display = txt.includes(filter) ? "" : "none";
-        }
-    });
-
-   
     
+
     // --- Modal 2 Event Listeners (Payment Options) ---
 
     // Close Modal 2 Button
     closeButton2.addEventListener('click', () => {
-        cartModal2.style.display = 'none';
+    cartModal2.style.display = 'none';
     });
 
     // Close Modal 2 when clicking outside the content
