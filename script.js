@@ -10,6 +10,15 @@ document.addEventListener('DOMContentLoaded', () => {
     const clearModalCartButton = document.getElementById('clear-modal-cart');
     const whatsappCheckoutButton = document.getElementById('whatsapp-checkout-btn'); // Renamed ID
 
+<<<<<<< Updated upstream
+=======
+    // Add new modal 1_2 elements
+    const cartModal1_2 = document.getElementById('cart-modal_1_2');
+    const closeButton1_2 = document.querySelector('.close-button_1_2');
+    const modalCartTotalSpan1_2 = document.getElementById('modal-cart-total_1_2');
+    const whatsappCheckoutBtn1_2 = document.getElementById('whatsapp-checkout-btn_1_2');
+
+>>>>>>> Stashed changes
     // New modal 2 elements (payment options)
     const cartModal2 = document.getElementById('cart-modal_2');
     const closeButton2 = document.querySelector('.close-button_2');
@@ -114,7 +123,7 @@ document.addEventListener('DOMContentLoaded', () => {
         cart.forEach(item => {
             whatsappMessage += `- ${item.name} x${item.quantity} (${formatPrice(item.price * item.quantity)})\n`;
         });
-
+        whatsappMessage += `\nConjunto / Zona : ${direccion}\n`;
         whatsappMessage += `\nTotal: ${formatPrice(totalOrderPrice)}\n`;
         whatsappMessage += `Método de pago elegido: ${paymentMethod}\n`;
 
@@ -126,7 +135,7 @@ document.addEventListener('DOMContentLoaded', () => {
         whatsappMessage += `\n¡Gracias!`;
 
         const encodedMessage = encodeURIComponent(whatsappMessage);
-        const phoneNumber = '+57 3142707164'; // Phone number for El Panze
+        const phoneNumber = '+57 3107674031'; // Phone number for El Panze
 
         return `https://wa.me/${phoneNumber}?text=${encodedMessage}`;
     }
@@ -207,6 +216,43 @@ document.addEventListener('DOMContentLoaded', () => {
         updateCartDisplay(); // Update total in the second modal
     });
 
+    // --- Modal 1.2 address ---
+    // Close Modal 1_2 Button
+    closeButton1_2.addEventListener('click', () => {
+        cartModal1_2.style.display = 'none';
+    });
+    // Close Modal 1_2 when clicking outside the content
+    window.addEventListener('click', (event) => {
+        if (event.target === cartModal1_2) {
+            cartModal1_2.style.display = 'none';
+        }
+    });
+    // Validate address selection before proceeding
+    document.getElementById("whatsapp-checkout-btn_1_2").addEventListener("click", function () {
+        let direccion = document.getElementById("direccion-select").value;
+        if (!direccion) {
+            showToast('Selecciona una dirección antes de continuar.');
+            return;
+        }
+        showToast('🏢Dirección seleccionada:", direccion');
+    });
+
+    document.getElementById("search-input").addEventListener("keyup", function () {
+        let filter = this.value.toLowerCase();
+        let options = document.getElementById("direccion-select").options;
+        for (let i = 0; i < options.length; i++) {
+            let txt = options[i].text.toLowerCase();
+            options[i].style.display = txt.includes(filter) ? "" : "none";
+        }
+    });
+
+    // whatsappCheckoutBtn1_2 click to go to modal 2
+    whatsappCheckoutBtn1_2.addEventListener('click', () => {
+        cartModal1_2.style.display = 'none'; // Close modal 1_2
+        cartModal2.style.display = 'flex'; // Open modal 2
+        updateCartDisplay();
+    });
+    
     // --- Modal 2 Event Listeners (Payment Options) ---
 
     // Close Modal 2 Button
@@ -221,7 +267,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // Nequi Button
+    // Nequi Button Opens Modal 3
     nequiBtn.addEventListener('click', () => {
         showToast('Has seleccionado NEQUI. Generando pedido...');
         const whatsappURL = generateWhatsAppMessage('NEQUI');
@@ -233,7 +279,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }, 1500);
     });
 
-    // Daviplata Button
+    // Daviplata Button Opens Modal 3
     daviplataBtn.addEventListener('click', () => {
         showToast('Has seleccionado DAVIPLATA. Generando pedido...');
         const whatsappURL = generateWhatsAppMessage('DAVIPLATA');
