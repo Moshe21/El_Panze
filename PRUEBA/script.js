@@ -34,7 +34,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Estado
   let cart = JSON.parse(localStorage.getItem('elpanze_cart') || '[]');
-
+  let domicilio = 0;
   // Funciones utilitarias
   const showToast = (msg) => {
     toastEl.textContent = msg;

@@ -67,7 +67,7 @@ document.addEventListener('DOMContentLoaded', () => {
         return total;
       }    
       function cost_domicilio (total){ 
-        total = total+ 3000; 
+        total = total+ domicilio; 
          return total;
       }
     function updateCartDisplay() {
@@ -273,6 +273,7 @@ document.addEventListener('DOMContentLoaded', () => {
             checkoutBtn.classList.add("active");
              if (!direccionesPermitidas.includes(direccion)) {
                 showToast('🏢 el costo envío es $3.000 ');
+                domicilio = 3000;
                 cost_domicilio(total);
                 // agregar cargo de envío al total
                 

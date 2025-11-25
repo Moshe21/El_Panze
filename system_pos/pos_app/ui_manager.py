@@ -112,6 +112,7 @@ class POSApp:
         file_menu.add_separator()
         file_menu.add_command(label="Salir", command=self.root.quit)
 
+        
 
     def load_products(self):
         """Carga los productos de la base de datos y crea botones."""
