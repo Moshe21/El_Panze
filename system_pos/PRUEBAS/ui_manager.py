@@ -34,23 +34,7 @@ class POSApp:
         self.products_container = ttk.Frame(products_frame)
         self.products_container.pack(fill="both", expand=True)
 
-        # Sección de Carrito (derecha)
-        cart_frame = ttk.LabelFrame(main, text="Carrito de Compras", padding="10")
-        cart_frame.grid(row=0, column=1, padx=10, pady=10, sticky="nsew")
-        main.grid_columnconfigure(1, weight=1)
-
-        self.cart_list = tk.Listbox(cart_frame, font=("Arial", 12), height=20)
-        self.cart_list.pack(fill="both", expand=True)
-
-        ttk.Button(cart_frame, text="Eliminar", command=self.remove_from_cart).pack(fill="x", pady=2)
-        ttk.Button(cart_frame, text="Vaciar Carrito", command=self.clear_cart).pack(fill="x", pady=5)
-
-        ttk.Label(cart_frame, text="TOTAL:").pack()
-        self.total_label = ttk.Label(cart_frame, font=("Arial", 20, "bold"), text="$ 0")
-        self.total_label.pack()
-
-        ttk.Button(cart_frame, text="Procesar Venta", command=self.process_sale).pack(fill="x", pady=10)
-
+        
         # Menú superior
         admin_menu = tk.Menu(self.root)
         self.root.config(menu=admin_menu)
@@ -64,28 +48,39 @@ class POSApp:
 
 
         # --------- PRODUCTOS ---------
-        products_frame = ttk.LabelFrame(main, text="Productos")
-        products_frame.grid(row=0, column=0, sticky="nsew", padx=10)
+        
+        # Sección de Carrito y Total (derecha)
+        cart_frame = ttk.LabelFrame(main, text="Carrito de Compras", padding="10")
+        cart_frame.grid(row=0, column=1, padx=10, pady=10, sticky="nsew")
+        main.grid_columnconfigure(1, weight=1)
 
-        self.products_container = ttk.Frame(products_frame)
-        self.products_container.pack(fill="both", expand=True)
+        self.cart_listbox = tk.Listbox(cart_frame, height=15, font=('Arial', 12))
+        self.cart_listbox.pack(fill=tk.BOTH, expand=True, pady=5)
 
-        # --------- CARRITO ---------
-        cart_frame = ttk.LabelFrame(main, text="Carrito de Compras")
-        cart_frame.grid(row=0, column=1, sticky="nsew", padx=10)
+        ttk.Button(cart_frame, text="Eliminar del Carrito", command=self.remove_from_cart).pack(fill=tk.X, pady=2)
 
-        self.cart_list = tk.Listbox(cart_frame, font=("Arial", 12), height=20)
-        self.cart_list.pack(fill="both", expand=True)
+        total_frame = ttk.Frame(cart_frame)
+        total_frame.pack(fill=tk.X, pady=10)
+        ttk.Label(total_frame, text="Total:").pack(side=tk.LEFT)
+        self.total_label = ttk.Label(total_frame, text="$ 0.00", font=('Arial', 16, 'bold'))
+        self.total_label.pack(side=tk.RIGHT)
 
-        ttk.Button(cart_frame, text="Eliminar", command=self.remove_from_cart).pack(fill="x")
-        ttk.Button(cart_frame, text="Vaciar", command=self.clear_cart).pack(fill="x", pady=5)
+        # Botones de Acción (al final)
+        action_buttons_frame = ttk.Frame(cart_frame)
+        action_buttons_frame.pack(fill=tk.X, pady=10)
 
-        ttk.Label(cart_frame, text="TOTAL:").pack()
-        self.total_label = ttk.Label(cart_frame, font=("Arial", 20, "bold"), text="$ 0")
-        self.total_label.pack()
+        ttk.Button(action_buttons_frame, text="Realizar Venta", command=self.process_sale, style='TButton').pack(side=tk.LEFT, expand=True, fill=tk.X, padx=5)
+        ttk.Button(action_buttons_frame, text="Vaciar Carrito", command=self.clear_cart, style='TButton').pack(side=tk.RIGHT, expand=True, fill=tk.X, padx=5)
 
-        ttk.Button(cart_frame, text="Procesar Venta", command=self.process_sale).pack(fill="x", pady=10)
-        self.load_products()
+        # Menú de administración (opcional, podría ser una ventana separada)
+        admin_menu = tk.Menu(self.root)
+        self.root.config(menu=admin_menu)
+        file_menu = tk.Menu(admin_menu, tearoff=0)
+        admin_menu.add_cascade(label="Administración", menu=file_menu)
+        file_menu.add_command(label="Gestionar Productos", command=self.manage_products)
+        file_menu.add_separator()
+        file_menu.add_command(label="Salir", command=self.root.quit)
+
 
         ttk.Button(cart_frame, text="Actualizar pagina", command=self.reload).pack(fill="x", pady=10)
     

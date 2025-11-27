@@ -1,6 +1,10 @@
+import os
 import tkinter as tk
 from tkinter import ttk, messagebox
 import db_manager
+from reportlab.pdfgen import canvas
+from reportlab.lib.pagesizes import letter
+from datetime import datetime
 
 
 
@@ -41,11 +45,9 @@ class POSApp:
         # **CORRECCIÓN IMPORTANTE AQUÍ:**
         # Llama a update_idletasks para asegurar que todos los widgets creados por create_widgets()
         # estén completamente renderizados y sus gestores de geometría hayan sido procesados.
-        self.root.update_idletasks()
-    
-        self.load_categories()
+        
         self.display_products_by_category()
-
+        
     
     
     def display_products_by_category(self, category_name=""):
@@ -103,6 +105,10 @@ class POSApp:
         ttk.Button(action_buttons_frame, text="Realizar Venta", command=self.process_sale, style='TButton').pack(side=tk.LEFT, expand=True, fill=tk.X, padx=5)
         ttk.Button(action_buttons_frame, text="Vaciar Carrito", command=self.clear_cart, style='TButton').pack(side=tk.RIGHT, expand=True, fill=tk.X, padx=5)
 
+        ttk.Button(cart_frame, text="Actualizar pagina", command=self.reload).pack(fill="x", pady=10)
+    
+
+
         # Menú de administración (opcional, podría ser una ventana separada)
         admin_menu = tk.Menu(self.root)
         self.root.config(menu=admin_menu)
@@ -113,6 +119,20 @@ class POSApp:
         file_menu.add_command(label="Salir", command=self.root.quit)
 
         
+
+    def reload(self):
+        import os, sys
+        if messagebox.askyesno("Reiniciar aplicación", "La aplicación se reiniciará. ¿Deseas continuar?"):
+            # Cerrar la ventana principal
+            try:
+                self.root.destroy()
+            except Exception:
+                pass
+            # Ruta al script main.py (misma carpeta que este archivo)
+            main_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "main.py"))
+            # Reemplaza el proceso actual por una nueva instancia de Python ejecutando main.py
+            os.execv(sys.executable, [sys.executable, main_path])
+
 
     def load_products(self):
         """Carga los productos de la base de datos y crea botones."""
@@ -131,7 +151,8 @@ class POSApp:
             if col > 3: # 4 botones por fila
                 col = 0
                 row += 1
-        self.product_buttons_frame.grid_columnconfigure(tuple(range(col)), weight=1) # Ajustar columnas
+        if col > 0:  # Only configure if there are columns
+            self.product_buttons_frame.grid_columnconfigure(tuple(range(col)), weight=1)
 
     def add_to_cart(self, product):
         """Añade un producto al carrito."""
@@ -316,4 +337,126 @@ class POSApp:
         print("Loading categories...")
         self.categories = []  # or fetch from a file/database
 
+     # ------------------- PROCESAR VENTA -------------------
+
+    def process_sale(self):
+        if not self.cart:
+            messagebox.showwarning("Carrito vacío", "Agrega productos antes de procesar.")
+            return
+
+        total = float(self.total_label.cget("text").replace("$", "").replace(",", ""))
+
+        items = []
+        for k, item in self.cart.items():
+            items.append({
+                "id": item["id"],
+                "cantidad": item["cantidad"],
+                "precio": item["precio"]
+            })
+
+        venta_id = db_manager.record_sale(total, items)
+
+        self.generate_invoice_pdf(venta_id, items, total)
+
+        messagebox.showinfo("Venta registrada", f"Venta #{venta_id} guardada con éxito.\nFactura generada.")
+        self.clear_cart()
+        Num_venta= int(venta_id)
+    # ------------------- FACTURA PDF -------------------
+
+    def generate_invoice_pdf(self, venta_id, items, total, cliente="Cliente General",
+                         metodo_pago="Efectivo", ruta_salida="factura.pdf"):
     
+        # Datos generados automáticamente
+        fecha = datetime.now().strftime("%d/%m/%Y")
+        numero_pedido = str(venta_id).zfill(4)
+        ruta_salida=f"factura{str(venta_id).zfill(4)}.pdf"
+        # 1 cm = 28,34645672 puntos
+        c = canvas.Canvas(ruta_salida, pagesize=(215, 397))  # Tamaño personalizado en puntos (1 punto = 1/72 pulgadas)
+        width=215 #tamaño impresión horizontal 7,59 cm
+        height=397 #tamaño impresión vertical 14 cm
+        
+        y = height - 40
+
+        # ENCABEZADO
+        c.setFont("Helvetica-Bold", 12)
+        c.drawString(20, y, f"🧾 PEDIDO #{numero_pedido} — EL PANZE")
+        y -= 30
+
+        c.setFont("Helvetica-Bold", 11)
+        c.drawString(20, y, "Fecha:")
+        c.setFont("Helvetica", 11)
+        c.drawString(60, y, f"{fecha}")
+        y -= 10
+        c.setFont("Helvetica-Bold", 11)
+        c.drawString(20, y, "Cliente:")
+        c.setFont("Helvetica", 11)
+        c.drawString(70, y, f"{cliente}")
+        y -= 10
+        c.setFont("Helvetica-Bold", 11)
+        c.drawString(20, y, "Método de pago:")
+        c.setFont("Helvetica", 11)
+        c.drawString(110, y, f"{metodo_pago}")
+        y -= 30
+
+        # TABLA
+        c.setFont("Helvetica-Bold", 11)
+        c.drawString(20, y, "Cantidad")
+        c.drawString(80, y, "Producto")
+        c.drawString(160, y, "Total")
+        y -= 10
+        c.line(20, y, 200, y)
+        y -= 10
+
+        # ITEMS
+        c.setFont("Helvetica-Bold", 10)
+        
+        # Create a product lookup dictionary
+        all_products = db_manager.get_all_products()
+        product_dict = {p[0]: p[1] for p in all_products}  # {id: nombre}
+
+        for item in items:
+            pid = item["id"]
+            cantidad = item["cantidad"]
+            precio_unitario = item["precio"]
+
+            # OBTENER NOMBRE DEL PRODUCTO
+            nombre_producto = product_dict.get(pid, "Producto Desconocido")
+            
+            subtotal = cantidad * precio_unitario
+            subtotal= int(subtotal)
+            c.drawString(20, y, str(cantidad))
+            c.drawString(40, y, nombre_producto)
+            c.drawString(160, y, f"${subtotal:,}".replace(",", "."))
+
+            y -= 15
+
+            if y < 7:
+                c.showPage()
+                y = height - 7
+
+        # TOTAL
+        y -= 10
+        c.line(20, y, 200, y)
+        y -= 15
+
+        c.setFont("Helvetica-Bold", 11)
+        total= int( total)
+        total_formateado = f"${total:,}".replace(",", ".")
+        c.drawString(20, y, f"Total a pagar: {total_formateado} COP")
+
+        # MENSAJE FINAL
+        y -= 50
+        c.setFont("Helvetica-Bold", 11)
+        c.drawString(20, y, "Gracias por tu compra 💛")
+        y -= 18
+        c.setFont("Helvetica-Bold", 10)
+        c.drawString(20, y, "“El sabor diferente de siempre.”")
+
+        c.save()
+        print(f"Factura generada: {ruta_salida}")
+        
+        # Print the PDF (Windows only)
+        try:
+            os.startfile(ruta_salida, "print")
+        except Exception as e:
+            print(f"No se pudo imprimir automáticamente: {e}")
