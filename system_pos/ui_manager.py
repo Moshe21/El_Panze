@@ -5,21 +5,120 @@ import db_manager
 from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import letter
 from datetime import datetime
+import subprocess
+from PIL import Image, ImageTk
 
+
+class PaymentMethodModal(tk.Toplevel):
+    """Modal para seleccionar método de pago."""
+    def __init__(self, parent, total, callback):
+        super().__init__(parent)
+        self.title("¿Cómo deseas pagar?")
+        self.geometry("400x250")
+        self.resizable(False, False)
+        self.callback = callback
+        self.total = total
+        
+        self.create_widgets()
+        self.transient(parent)
+        self.grab_set()
+    
+    def create_widgets(self):
+        main_frame = ttk.Frame(self)
+        main_frame.pack(fill=tk.BOTH, expand=True, padx=15, pady=15)
+        
+        ttk.Label(main_frame, text="¿Cómo deseas pagar?", font=('Arial', 14, 'bold')).pack(pady=10)
+        ttk.Label(main_frame, text=f"Total: ${self.total:,.0f}", font=('Arial', 12)).pack(pady=10)
+        
+        button_frame = ttk.Frame(main_frame)
+        button_frame.pack(fill=tk.BOTH, expand=True, pady=20)
+        
+        ttk.Button(button_frame, text="💳 NEQUI", command=lambda: self.select_payment('NEQUI')).pack(fill=tk.X, pady=5)
+        ttk.Button(button_frame, text="💳 DAVIPLATA", command=lambda: self.select_payment('DAVIPLATA')).pack(fill=tk.X, pady=5)
+        ttk.Button(button_frame, text="💵 EFECTIVO", command=lambda: self.select_payment('EFECTIVO')).pack(fill=tk.X, pady=5)
+    
+    def select_payment(self, method):
+        if method == 'EFECTIVO':
+            self.destroy()
+            CashPaymentModal(self.master, self.total, self.callback)
+        else:
+            self.callback(method, self.total, 0)
+            self.destroy()
+
+
+class CashPaymentModal(tk.Toplevel):
+    """Modal para pago en efectivo."""
+    def __init__(self, parent, total, callback):
+        super().__init__(parent)
+        self.title("Pago en Efectivo")
+        self.geometry("400x300")
+        self.resizable(False, False)
+        self.callback = callback
+        self.total = total
+        
+        self.create_widgets()
+        self.transient(parent)
+        self.grab_set()
+    
+    def create_widgets(self):
+        main_frame = ttk.Frame(self)
+        main_frame.pack(fill=tk.BOTH, expand=True, padx=15, pady=15)
+        
+        ttk.Label(main_frame, text="Pago en Efectivo", font=('Arial', 14, 'bold')).pack(pady=10)
+        ttk.Label(main_frame, text=f"Total a pagar: ${self.total:,.0f}", font=('Arial', 12, 'bold')).pack(pady=10)
+        
+        ttk.Label(main_frame, text="¿Con cuánto vas a pagar?").pack(anchor='w', pady=(10, 5))
+        self.amount_entry = ttk.Entry(main_frame, font=('Arial', 12))
+        self.amount_entry.pack(fill=tk.X, pady=5)
+        self.amount_entry.bind("<KeyRelease>", self.calculate_change)
+        
+        ttk.Label(main_frame, text="Tu cambio:").pack(anchor='w', pady=(10, 5))
+        self.change_label = ttk.Label(main_frame, text="$0", font=('Arial', 12, 'bold'), foreground='green')
+        self.change_label.pack(anchor='w', pady=5)
+        
+        button_frame = ttk.Frame(main_frame)
+        button_frame.pack(fill=tk.X, pady=20)
+        
+        ttk.Button(button_frame, text="Confirmar Pago", command=self.confirm_payment).pack(side=tk.LEFT, padx=5)
+        ttk.Button(button_frame, text="Cancelar", command=self.destroy).pack(side=tk.RIGHT, padx=5)
+    
+    def calculate_change(self, event=None):
+        try:
+            amount = float(self.amount_entry.get())
+            change = max(0, amount - self.total)
+            self.change_label.config(text=f"${change:,.0f}")
+        except ValueError:
+            self.change_label.config(text="$0")
+    
+    def confirm_payment(self):
+        try:
+            amount = float(self.amount_entry.get())
+            if amount < self.total:
+                messagebox.showwarning("Error", "El monto debe ser mayor o igual al total.")
+                return
+            change = amount - self.total
+            self.callback('EFECTIVO', amount, change)
+            self.destroy()
+        except ValueError:
+            messagebox.showwarning("Error", "Por favor ingresa un monto válido.")
 
 
 class POSApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("El Panze - Sistema POS")
+        self.root.title("El Panze - Sistema POS 4.2")
         self.root.geometry("1024x768")
 
         self.cart = {}
 
         # Cargar imagen de fondo
         #self.background_image = None
-        self.bg_label = None
-        #self.load_background_image()
+        #self.bg_label = None
+        #imagen_fondo = "asset/logo.png"
+        #self.load_background_image( imagen_fondo)
+        
+            
+
 
         # Estilos (movidos aquí para asegurar que los estilos se definan antes de que los widgets los usen)
         self.style = ttk.Style()
@@ -33,10 +132,10 @@ class POSApp:
                        foreground=[('active', 'white'), ('!disabled', 'black')],
                        background=[('active', '#5CB85C'), ('!disabled', 'white')])
 
-        self.style.configure('Category.TButton', font=('Arial', 12, 'bold'), foreground='white', background='#4A90E2')
+        self.style.configure('Category.TButton', font=('Arial', 12, 'bold'), foreground='#4A90E2', background='#4A90E2')
         self.style.map('Category.TButton', background=[('active', '#3A7ADF')])
 
-        self.style.configure('Action.TButton', font=('Arial', 12, 'bold'), foreground='white', background='#A9D18E')
+        self.style.configure('Action.TButton', font=('Arial', 12, 'bold'), foreground='#A9D18E', background='#A9D18E')
         self.style.map('Action.TButton', background=[('active', '#8BC34A')])
 
 
@@ -49,7 +148,21 @@ class POSApp:
         self.display_products_by_category()
         
     
-    
+    def load_background_image(self, imagen_fondo):
+        
+        try:
+            img = Image.open(imagen_fondo)
+            img = img.resize((self.root.winfo_screenwidth(), self.root.winfo_screenheight()), Image.ANTIALIAS)
+            self.background_image = ImageTk.PhotoImage(img)
+            if self.bg_label is None:
+                self.bg_label = tk.Label(self.root, image=self.background_image)
+                self.bg_label.place(x=0, y=0, relwidth=1, relheight=1)
+            else:
+                self.bg_label.config(image=self.background_image)
+        except Exception as e:
+            print(f"No se pudo cargar la imagen de fondo: {e}")
+
+
     def display_products_by_category(self, category_name=""):
         for widget in self.product_buttons_frame.winfo_children():
             widget.destroy()
@@ -69,18 +182,20 @@ class POSApp:
                 col = 0
                 row += 1
 
-    def create_widgets(self):
+    def create_widgets(self,products= db_manager.count_products()):
         # Marco principal
         main_frame = ttk.Frame(self.root, padding="10")
         main_frame.pack(fill=tk.BOTH, expand=True)
 
         # Sección de Productos (izquierda)
-        products_frame = ttk.LabelFrame(main_frame, text="Productos", padding="10")
-        products_frame.grid(row=0, column=0, padx=10, pady=10, sticky="nsew")
-        main_frame.grid_columnconfigure(0, weight=2) # Más espacio para productos
+        if products >= 0:
+            products_frame = ttk.LabelFrame(main_frame, text="Productos", padding="10")
+            products_frame.grid(row=0, column=0, padx=10, pady=10, sticky="nsew")
+            main_frame.grid_columnconfigure(0, weight=2) # Más espacio para productos
 
-        self.product_buttons_frame = ttk.Frame(products_frame)
-        self.product_buttons_frame.pack(fill=tk.BOTH, expand=True)
+        
+            self.product_buttons_frame = ttk.Frame(products_frame)
+            self.product_buttons_frame.pack(fill=tk.BOTH, expand=True)
 
         # Sección de Carrito y Total (derecha)
         cart_frame = ttk.LabelFrame(main_frame, text="Carrito de Compras", padding="10")
@@ -340,75 +455,91 @@ class POSApp:
      # ------------------- PROCESAR VENTA -------------------
 
     def process_sale(self):
+        """Procesa la venta con modales de dirección y pago."""
         if not self.cart:
             messagebox.showwarning("Carrito vacío", "Agrega productos antes de procesar.")
             return
 
         total = float(self.total_label.cget("text").replace("$", "").replace(",", ""))
 
-        items = []
-        for k, item in self.cart.items():
-            items.append({
-                "id": item["id"],
-                "cantidad": item["cantidad"],
-                "precio": item["precio"]
-            })
-
-        venta_id = db_manager.record_sale(total, items)
-
-        self.generate_invoice_pdf(venta_id, items, total)
-
-        messagebox.showinfo("Venta registrada", f"Venta #{venta_id} guardada con éxito.\nFactura generada.")
-        self.clear_cart()
-        Num_venta= int(venta_id)
+        # Modal 1: Seleccionar dirección
+        def on_address_selected(address, shipping_cost):
+            total_with_shipping = total + shipping_cost
+            
+            # Modal 2: Seleccionar método de pago
+            def on_payment_method(method, amount_paid, change):
+                items = []
+                for k, item in self.cart.items():
+                    items.append({
+                        "id": item["id"],
+                        "cantidad": item["cantidad"],
+                        "precio": item["precio"]
+                    })
+                
+                venta_id = db_manager.record_sale(total_with_shipping, items)
+                
+                # Generar factura con detalles de pago y dirección
+                self.generate_invoice_pdf(venta_id, items, total_with_shipping, cliente=address, metodo_pago=method)
+                
+                messagebox.showinfo("Venta Registrada", f"Venta #{venta_id} completada con éxito.\nDirección: {address}\nMétodo: {method}")
+                self.clear_cart()
+            
+            PaymentMethodModal(self.root, total_with_shipping, on_payment_method)
+        
+        AddressModal(self.root, on_address_selected)
+       
     # ------------------- FACTURA PDF -------------------
 
     def generate_invoice_pdf(self, venta_id, items, total, cliente="Cliente General",
-                         metodo_pago="Efectivo", ruta_salida="factura.pdf"):
+                         metodo_pago="Efectivo", ruta_salida="factura.pdf",Image_path="assets/logo_impresora.jpg"):
     
         # Datos generados automáticamente
         fecha = datetime.now().strftime("%d/%m/%Y")
         numero_pedido = str(venta_id).zfill(4)
         ruta_salida=f"factura{str(venta_id).zfill(4)}.pdf"
         # 1 cm = 28,34645672 puntos
-        c = canvas.Canvas(ruta_salida, pagesize=(215, 397))  # Tamaño personalizado en puntos (1 punto = 1/72 pulgadas)
-        width=215 #tamaño impresión horizontal 7,59 cm
+        c = canvas.Canvas(ruta_salida, pagesize=(136, 397))  # Tamaño personalizado en puntos (1 punto = 1/72 pulgadas)
+        width=136 #tamaño impresión horizontal 4,8 cm
         height=397 #tamaño impresión vertical 14 cm
-        
-        y = height - 40
+    
+        y = height - 10
 
         # ENCABEZADO
-        c.setFont("Helvetica-Bold", 12)
-        c.drawString(20, y, f"🧾 PEDIDO #{numero_pedido} — EL PANZE")
+       
+        c.drawImage(Image_path, 0, y - 98, width=120, height=93, preserveAspectRatio=None, mask='auto')
+        y -= 120
+
+        c.setFont("Helvetica-Bold", 10)
+        c.drawString(0, y, f"🧾 PEDIDO #{numero_pedido}")
         y -= 30
 
-        c.setFont("Helvetica-Bold", 11)
-        c.drawString(20, y, "Fecha:")
-        c.setFont("Helvetica", 11)
-        c.drawString(60, y, f"{fecha}")
+        c.setFont("Helvetica-Bold", 8)
+        c.drawString(0, y, "Fecha:")
+        c.setFont("Helvetica", 8)
+        c.drawString(27, y, f"{fecha}")
         y -= 10
-        c.setFont("Helvetica-Bold", 11)
-        c.drawString(20, y, "Cliente:")
-        c.setFont("Helvetica", 11)
-        c.drawString(70, y, f"{cliente}")
+        c.setFont("Helvetica-Bold", 8)
+        c.drawString(0, y, "Cliente:")
+        c.setFont("Helvetica", 8)
+        c.drawString(35, y, f"{cliente}")
         y -= 10
-        c.setFont("Helvetica-Bold", 11)
-        c.drawString(20, y, "Método de pago:")
-        c.setFont("Helvetica", 11)
-        c.drawString(110, y, f"{metodo_pago}")
+        c.setFont("Helvetica-Bold", 8)
+        c.drawString(0, y, "Método de pago:")
+        c.setFont("Helvetica", 8)
+        c.drawString(67, y, f"{metodo_pago}")
         y -= 30
 
         # TABLA
-        c.setFont("Helvetica-Bold", 11)
-        c.drawString(20, y, "Cantidad")
-        c.drawString(80, y, "Producto")
-        c.drawString(160, y, "Total")
+        c.setFont("Helvetica-Bold", 8)
+        c.drawString(0, y, "Cantidad")
+        c.drawString(54, y, "Producto")
+        c.drawString(109, y, "Total")
         y -= 10
-        c.line(20, y, 200, y)
+        c.line(0, y, 136, y)
         y -= 10
 
         # ITEMS
-        c.setFont("Helvetica-Bold", 10)
+        c.setFont("Helvetica-Bold", 7)
         
         # Create a product lookup dictionary
         all_products = db_manager.get_all_products()
@@ -424,9 +555,9 @@ class POSApp:
             
             subtotal = cantidad * precio_unitario
             subtotal= int(subtotal)
-            c.drawString(20, y, str(cantidad))
-            c.drawString(40, y, nombre_producto)
-            c.drawString(160, y, f"${subtotal:,}".replace(",", "."))
+            c.drawString(0, y, str(cantidad))
+            c.drawString(14, y, nombre_producto)
+            c.drawString(109, y, f"${subtotal:,}".replace(",", "."))
 
             y -= 15
 
@@ -436,27 +567,114 @@ class POSApp:
 
         # TOTAL
         y -= 10
-        c.line(20, y, 200, y)
+        c.line(0, y, 136, y)
         y -= 15
 
-        c.setFont("Helvetica-Bold", 11)
+        c.setFont("Helvetica-Bold", 8)
         total= int( total)
         total_formateado = f"${total:,}".replace(",", ".")
-        c.drawString(20, y, f"Total a pagar: {total_formateado} COP")
+        c.drawString(0, y, f"Total a pagar: {total_formateado} COP")
 
         # MENSAJE FINAL
         y -= 50
-        c.setFont("Helvetica-Bold", 11)
-        c.drawString(20, y, "Gracias por tu compra 💛")
+        c.setFont("Helvetica-Bold", 8)
+        c.drawString(0, y, "Gracias por tu compra!")
         y -= 18
         c.setFont("Helvetica-Bold", 10)
-        c.drawString(20, y, "“El sabor diferente de siempre.”")
-
+        c.drawString(0, y, "“El sabor diferente")
+        y -= 10
+        c.setFont("Helvetica-Bold", 10)
+        c.drawString(0, y, "   de siempre.”")
         c.save()
         print(f"Factura generada: {ruta_salida}")
         
-        # Print the PDF (Windows only)
-        try:
-            os.startfile(ruta_salida, "print")
-        except Exception as e:
-            print(f"No se pudo imprimir automáticamente: {e}")
+    #"""
+    #IMPRINTAR PDF EN WINDOWS 
+    ##    impresora = "POS-58"  # Reemplaza con el nombre exacto de tu impresora
+    #    try:
+     #       comando = [
+      #          r"C:\Users\Panze\Documents\GitHub\El_Panze\system_pos\SumatraPDF-3.5.2-64.exe",
+       #         "-print-to", impresora,
+        #        "-silent",
+         #       ruta_salida
+         #   ]
+         #   subprocess.run(comando, shell=True)
+         #   print("Impresión enviada correctamente.")
+   #     except Exception as e:
+    #        print(f"Error al imprimir: {e}")
+     #      """
+
+
+class AddressModal(tk.Toplevel):
+    """Modal para seleccionar dirección de envío."""
+    def __init__(self, parent, callback):
+        super().__init__(parent)
+        self.title("Seleccionar Dirección")
+        self.geometry("400x350")
+        self.resizable(False, False)
+        self.callback = callback
+        self.selected_address = None
+        self.shipping_cost = 0
+        
+        self.direcciones = [
+            "Batará", "Aracari", "Milano", "Ibis", "Amazilia", "Jilguero", "Alondra", "Tángara", "Andaríos", "Frontino",
+            "Sie 1", "Sie 2", "Sie 3", "Sie 4",
+            "Torre de San Juan 1B", "Torre de San Juan 2B", "Torre de San Juan 3B", "Torre de San Juan 4B", "Torre de San Juan 5B",
+            "Torre de San Juan 6B", "Torre de San Juan 7B", "Torre de San Juan 8B", "Torre de San Juan 9B", "Torre de San Juan 10B",
+            "Torre de San Juan 11B", "Torre de San Juan 12B", "Torre de San Juan 13B", "Torre de San Juan 14B", "Torre de San Juan 15B",
+            "Torre de San Juan 16B", "Torre de San Juan 17B", "Torre de San Juan 18B", "Torre de San Juan 19B", "Torre de San Juan 20B",
+            "Torre de San Juan 21B", "Torre de San Juan 22B", "Torre de San Juan 23B", "Torre de San Juan 24B", "Torre de San Juan 25B",
+            "Torre de San Juan 26B", "Torre de San Juan 27B", "Torre de San Juan 28B", "Torre de San Juan 29B", "Torre de San Juan 30B",
+            "Torre de San Juan 31B", "Torre de San Juan 32B", "Torre de San Juan 33B", "Torre de San Juan 34B", "Torre de San Juan 35B",
+            "Torre de San Juan 36B", "Torre de San Juan 37B", "Torre de San Juan 38B"
+        ]
+        
+        self.create_widgets()
+        self.transient(parent)
+        self.grab_set()
+    
+    def create_widgets(self):
+        main_frame = ttk.Frame(self)
+        main_frame.pack(fill=tk.BOTH, expand=True, padx=15, pady=15)
+        
+        ttk.Label(main_frame, text="Seleccionar Dirección", font=('Arial', 14, 'bold')).pack(pady=10)
+        
+        ttk.Label(main_frame, text="Dirección:").pack(anchor='w', pady=(10, 5))
+        self.address_combo = ttk.Combobox(main_frame, values=self.direcciones, state='readonly', width=40)
+        self.address_combo.pack(fill=tk.X, pady=5)
+        self.address_combo.bind("<<ComboboxSelected>>", self.on_address_selected)
+        
+        self.info_label = ttk.Label(main_frame, text="", foreground="green")
+        self.info_label.pack(pady=10)
+        
+        button_frame = ttk.Frame(main_frame)
+        button_frame.pack(fill=tk.X, pady=20)
+        
+        ttk.Button(button_frame, text="Confirmar Dirección", command=self.confirm_address).pack(side=tk.LEFT, padx=5)
+        ttk.Button(button_frame, text="Cancelar", command=self.cancel).pack(side=tk.RIGHT, padx=5)
+    
+    def on_address_selected(self, event):
+        address = self.address_combo.get()
+        if address:
+            free_addresses = [
+                "Batará", "Aracari", "Milano", "Ibis", "Amazilia", "Jilguero", "Alondra", "Tángara", "Andaríos", "Frontino",
+                "Sie 1", "Sie 2", "Sie 3", "Sie 4"
+            ]
+            if address in free_addresses:
+                self.info_label.config(text="✓ Envío incluido", foreground="green")
+                self.shipping_cost = 0
+            else:
+                self.info_label.config(text="🚚 Costo de envío: $3.000", foreground="orange")
+                self.shipping_cost = 3000
+    
+    def confirm_address(self):
+        address = self.address_combo.get()
+        if not address:
+            messagebox.showwarning("Advertencia", "Por favor selecciona una dirección.")
+            return
+        self.selected_address = address
+        self.callback(address, self.shipping_cost)
+        self.destroy()
+    
+    def cancel(self):
+        self.destroy()

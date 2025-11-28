@@ -84,6 +84,15 @@ def record_sale(total, items_vendidos):
     conn.close()
     return venta_id
 
+def count_products():
+    """Cuenta el número total de productos en la base de datos."""
+    conn = connect_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT COUNT(*) FROM productos")
+    count = cursor.fetchone()[0]
+    conn.close()
+    return count
+
 if __name__ == '__main__':
     create_tables()
     # Ejemplo de uso:
