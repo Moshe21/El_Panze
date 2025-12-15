@@ -271,13 +271,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             checkoutBtn.disabled = false;
             checkoutBtn.classList.add("active");
-             if (!direccionesPermitidas.includes(direccion)) {
-                showToast('🏢 el costo envío es $3.000 ');
-                domicilio = 3000;
-                cost_domicilio(total);
-                // agregar cargo de envío al total
-                
-            }
+             
             whatsappCheckoutBtn1_2.addEventListener('click', () => {
                 showToast('🏢Dirección seleccionada: ' + direccion);
                 cartModal1_2.style.display = 'none'; // Close modal 1_2
