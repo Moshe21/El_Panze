@@ -51,13 +51,113 @@ def create_tables():
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS observaciones_venta (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            venta_id INTEGER NOT NULL,
+            num_factura INTEGER NOT NULL,
             producto_nombre TEXT NOT NULL,
             observacion TEXT,
-            FOREIGN KEY (venta_id) REFERENCES ventas(id)
+            FOREIGN KEY (facturaS) REFERENCES ventas(num_factura)
+        )
+    ''')
+    # Tabla de direcciones/ciudades
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS direcciones (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            nombre TEXT NOT NULL UNIQUE,
+            envio_incluido INTEGER DEFAULT 0
         )
     ''')
     conn.commit()
+    conn.close()
+
+
+DEFAULT_ADDRESSES = [
+    "Batará", "Aracari", "Milano", "Ibis", "Amazilia", "Jilguero", "Alondra", "Tángara", "Andaríos", "Frontino",
+    "Sie 1", "Sie 2", "Sie 3", "Sie 4","andarios",
+    "Tángara", "Terranova", "Frontino","bosques alizos","bosques arrayan ","altamorada",
+    "Taller Motos",
+    "al frente iglesia",
+    "Torre de San Juan 1B", "Torre de San Juan 2B", "Torre de San Juan 3B", "Torre de San Juan 4B", "Torre de San Juan 5B",
+    "Torre de San Juan 6B", "Torre de San Juan 7B", "Torre de San Juan 8B", "Torre de San Juan 9B", "Torre de San Juan 10B",
+    "Torre de San Juan 11B", "Torre de San Juan 12B", "Torre de San Juan 13B", "Torre de San Juan 14B", "Torre de San Juan 15B",
+    "Torre de San Juan 16B", "Torre de San Juan 17B", "Torre de San Juan 18B", "Torre de San Juan 19B", "Torre de San Juan 20B",
+    "Torre de San Juan 21B", "Torre de San Juan 22B", "Torre de San Juan 23B", "Torre de San Juan 24B", "Torre de San Juan 25B",
+    "Torre de San Juan 26B", "Torre de San Juan 27B", "Torre de San Juan 28B", "Torre de San Juan 29B", "Torre de San Juan 30B",
+    "Torre de San Juan 31B", "Torre de San Juan 32B", "Torre de San Juan 33B", "Torre de San Juan 34B", "Torre de San Juan 35B",
+    "Torre de San Juan 36B", "Torre de San Juan 37B", "Torre de San Juan 38B",
+    "San javier 1", "San javier 2", "San javier 3", "San javier 4", "San javier 5", "San javier 6", "San javier 7",
+    "San javier 8", "San javier 9", "San javier 10", "San javier 11", "San javier 12", "San javier 13", "San javier 14",
+    "San javier 15", "San javier 16", "San javier 17", "San javier 18", "San javier 19", "San javier 20","San javier 21",
+    "San javier 22", "San javier 23", "San javier 24", "San javier 25", "San javier 26", "San javier 27", "San javier 28",
+    "San javier 29", "San javier 30", "San javier 31", "San javier 32", "San javier 33", "San javier 34","pago punto"
+]
+
+# Subconjunto de direcciones con envío incluido
+DEFAULT_FREE = set([
+    "Batará", "Aracari", "Milano", "Ibis", "Amazilia", "Jilguero", "Andaríos",
+    "Tángara", "Frontino","bosques alizos","bosques arrayan ","altamorada",
+    "andarios","Taller Motos",
+    "Sie 1", "Sie 2", "Sie 3", "Sie 4",
+    "al frente iglesia","Terranova",
+    # Torres y San javier también incluidos en la lista por defecto
+    "Torre de San Juan 1B", "Torre de San Juan 2B", "Torre de San Juan 3B",
+    "Torre de San Juan 4B", "Torre de San Juan 5B", "Torre de San Juan 6B", "Torre de San Juan 7B",
+    "Torre de San Juan 8B", "Torre de San Juan 9B", "Torre de San Juan 10B",
+    "Torre de San Juan 11B", "Torre de San Juan 12B", "Torre de San Juan 13B", "Torre de San Juan 14B",
+    "Torre de San Juan 15B", "Torre de San Juan 16B", "Torre de San Juan 17B", "Torre de San Juan 18B",
+    "Torre de San Juan 19B", "Torre de San Juan 20B", "Torre de San Juan 21B", "Torre de San Juan 22B",
+    "Torre de San Juan 23B", "Torre de San Juan 24B", "Torre de San Juan 25B", "Torre de San Juan 26B",
+    "Torre de San Juan 27B", "Torre de San Juan 28B", "Torre de San Juan 29B", "Torre de San Juan 30B",
+    "Torre de San Juan 31B", "Torre de San Juan 32B", "Torre de San Juan 33B", "Torre de San Juan 34B",
+    "Torre de San Juan 35B", "Torre de San Juan 36B", "Torre de San Juan 37B", "Torre de San Juan 38B",
+    "San javier 1", "San javier 2", "San javier 3", "San javier 4", "San javier 5", "San javier 6", "San javier 7",
+    "San javier 8", "San javier 9", "San javier 10", "San javier 11", "San javier 12", "San javier 13",
+    "San javier 14", "San javier 15", "San javier 16", "San javier 17", "San javier 18", "San javier 19",
+    "San javier 20","San javier 21","San javier 22", "San javier 23", "San javier 24", "San javier 25",
+    "San javier 26", "San javier 27", "San javier 28","San javier 29", "San javier 30", "San javier 31",
+    "San javier 32", "San javier 33", "San javier 34","pago punto"
+])
+
+def add_address(nombre, envio_incluido=False):
+    conn = connect_db()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("INSERT OR IGNORE INTO direcciones (nombre, envio_incluido) VALUES (?, ?)", (nombre, 1 if envio_incluido else 0))
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def get_all_addresses():
+    conn = connect_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT nombre FROM direcciones ORDER BY nombre COLLATE NOCASE")
+    rows = cursor.fetchall()
+    conn.close()
+    return [r[0] for r in rows]
+
+
+def get_free_addresses():
+    conn = connect_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT nombre FROM direcciones WHERE envio_incluido = 1 ORDER BY nombre COLLATE NOCASE")
+    rows = cursor.fetchall()
+    conn.close()
+    return [r[0] for r in rows]
+
+
+def ensure_default_addresses():
+    """Inserta direcciones por defecto si la tabla está vacía."""
+    conn = connect_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT COUNT(*) FROM direcciones")
+    count = cursor.fetchone()[0]
+    if count == 0:
+        for addr in DEFAULT_ADDRESSES:
+            envio = 1 if addr in DEFAULT_FREE else 0
+            try:
+                cursor.execute("INSERT OR IGNORE INTO direcciones (nombre, envio_incluido) VALUES (?, ?)", (addr, envio))
+            except Exception:
+                pass
+        conn.commit()
     conn.close()
 
 def add_product(nombre, precio, categoria="General", stock=0):
@@ -82,8 +182,12 @@ def get_all_products():
 
 # Más funciones para actualizar, eliminar productos, registrar ventas, etc.
 # Ejemplo:
-def record_sale(total, items_vendidos, cliente="", metodo_pago="", observaciones=None):
-    """Registra una nueva venta y guarda factura con observaciones."""
+def record_sale(total, items_vendidos, cliente="", metodo_pago="", observaciones=None, split_payment=None):
+    """Registra una nueva venta y guarda factura con observaciones.
+    
+    Args:
+        split_payment: tuple (method1, method2, amount1, amount2) si es pago dividido, o None
+    """
     conn = connect_db()
     cursor = conn.cursor()
     import datetime
@@ -94,8 +198,16 @@ def record_sale(total, items_vendidos, cliente="", metodo_pago="", observaciones
     
     # Guardar en tabla de facturas
     num_factura = str(venta_id).zfill(4)
+    
+    # Si es pago dividido, guardar ambos métodos en formato "METHOD1|AMOUNT1+METHOD2|AMOUNT2"
+    if split_payment:
+        method1, method2, amount1, amount2 = split_payment
+        metodo_pago_guardado = f"{method1}|{amount1}+{method2}|{amount2}"
+    else:
+        metodo_pago_guardado = metodo_pago
+    
     cursor.execute("INSERT INTO facturas (num_factura, fecha_hora, cliente, metodo_pago, valor_total) VALUES (?, ?, ?, ?, ?)",
-                   (num_factura, fecha_hora, cliente, metodo_pago, total))
+                   (num_factura, fecha_hora, cliente, metodo_pago_guardado, total))
 
     for item in items_vendidos:
         producto_id = item['id']

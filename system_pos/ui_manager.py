@@ -6,7 +6,14 @@ from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import letter
 from datetime import datetime
 import subprocess
-from PIL import Image, ImageTk
+from PIL import Image, ImageTk, ImageFilter
+
+# Paleta global (basada en logo.png)
+PALETTE_BG1 = "#D7C6AA"  # Fondo principal claro
+PALETTE_BG2 = "#D7C6AA"  # Fondo secundario
+PALETTE_ACCENT = '#733F34'  # Acento suave
+PALETTE_DARK = '#733F34'  # Marrón oscuro
+PALETTE_DARK2 = "#FFFFFF"  # fondo blanco
 
 
 class POSApp:
@@ -19,6 +26,13 @@ class POSApp:
         self.ultima_factura = None  # Guardar datos de la última factura impresa
         self.saved_carts = {}  # Carritos temporales guardados {nombre: {product_id: {...}}}
         self.current_cart_name = "Carrito Principal"  # Nombre del carrito actual
+        # Saldos iniciales y totales acumulados (en memoria)
+        self.saldo_nequi_inicio = 0.0
+        self.saldo_daviplata_inicio = 0.0
+        self.saldo_nequi_total = 0.0
+        self.saldo_daviplata_total = 0.0
+        # Control de modo pro
+        self.modo_pro_activo = False
 
         # Cargar imagen de fondo
         #self.background_image = None
@@ -29,32 +43,107 @@ class POSApp:
             
 
 
-        # Estilos (movidos aquí para asegurar que los estilos se definan antes de que los widgets los usen)
+        # Paleta basada en logo.png
+        self.PALETTE_BG1 = "#D7C6AA"  # Fondo principal claro
+        self.PALETTE_BG2 = "#D7C6AA"  # Fondo secundario
+        self.PALETTE_BG3 = "#FFAD43"  # Fondo secundario
+        self.PALETTE_ACCENT = '#733F34'  # Acento suave
+        self.PALETTE_DARK = '#733F34'  # Marrón oscuro
+        self.PALETTE_DARK2 = "#FFFFFF"  # Burdeos oscuro
+
+        # Estilos globales (usar 'clam' para mejor control visual)
         self.style = ttk.Style()
-        self.style.theme_use('clam')
-        self.style.configure('TFrame', background='white')
-        self.style.configure('TLabel', background='white', font=('Arial', 12))
+        try:
+            self.style.theme_use('clam')
+        except Exception:
+            pass
 
-        self.style.configure('Product.TButton', font=('Arial', 10, 'bold'), foreground='black',
-                             background='white', borderwidth=2, relief="solid", padding=5)
-        self.style.map('Product.TButton',
-                       foreground=[('active', 'white'), ('!disabled', 'black')],
-                       background=[('active', '#5CB85C'), ('!disabled', 'white')])
+        # Fondo raíz
+        try:
+            self.root.configure(bg=self.PALETTE_BG1)
+        except Exception:
+            pass
 
-        self.style.configure('Category.TButton', font=('Arial', 12, 'bold'), foreground='#4A90E2', background='#4A90E2')
-        self.style.map('Category.TButton', background=[('active', '#3A7ADF')])
+        # Frames y labels
+        self.style.configure('TFrame', background=self.PALETTE_BG1, foreground=self.PALETTE_DARK)
+        self.style.configure('TLabel', background=self.PALETTE_BG1, foreground=self.PALETTE_DARK, font=('Arial', 12))
+        self.style.configure('TLabelFrame', background=self.PALETTE_BG1, foreground=self.PALETTE_DARK)
 
-        self.style.configure('Action.TButton', font=('Arial', 12, 'bold'), foreground='#A9D18E', background='#A9D18E')
-        self.style.map('Action.TButton', background=[('active', '#8BC34A')])
+        # Botones
+        # Use dark colors only for text; backgrounds should remain light/accent
+        self.style.configure('TButton', font=('Arial', 11, 'bold'), foreground=self.PALETTE_DARK2, background=self.PALETTE_ACCENT, padding=6)
+        self.style.map('TButton', background=[('active', self.PALETTE_ACCENT), ('!disabled', self.PALETTE_ACCENT)],
+                        foreground=[('active', 'white'), ('!disabled', self.PALETTE_DARK2)])
+
+        # Botón de producto con estilo propio
+        self.style.configure('Product.TButton', font=('Arial', 10, 'bold'), foreground=self.PALETTE_DARK, background=self.PALETTE_BG3, borderwidth=1, relief='raised', padding=6)
+        self.style.map('Product.TButton', background=[('active', self.PALETTE_ACCENT), ('!disabled', self.PALETTE_BG3)])
+
+        # Botones de categoría/acción
+        self.style.configure('Category.TButton', font=('Arial', 12, 'bold'), foreground=self.PALETTE_DARK2, background=self.PALETTE_ACCENT)
+        self.style.map('Category.TButton', background=[('active', self.PALETTE_ACCENT)])
+        # Los botones de acción usan fondo de acento y texto oscuro; evitar fondos oscuros
+        self.style.configure('Action.TButton', font=('Arial', 12, 'bold'), foreground=self.PALETTE_DARK2, background=self.PALETTE_ACCENT)
+        self.style.map('Action.TButton', background=[('active', self.PALETTE_BG2)])
+
+        # Entradas
+        self.style.configure('TEntry', fieldbackground=self.PALETTE_BG2, background=self.PALETTE_BG2, foreground=self.PALETTE_DARK)
+
+        # Treeview
+        self.style.configure('Treeview', background=self.PALETTE_BG2, fieldbackground=self.PALETTE_BG2, foreground=self.PALETTE_DARK, font=('Arial', 10))
+        self.style.configure('Treeview.Heading', background=self.PALETTE_ACCENT, foreground=self.PALETTE_DARK2, font=('Arial', 10, 'bold'))
+        # La selección debe usar un color de acento (no los marrones oscuros)
+        self.style.map('Treeview', background=[('selected', self.PALETTE_ACCENT)], foreground=[('selected', self.PALETTE_DARK2)])
 
 
         self.create_widgets()
         
 
-        # **CORRECCIÓN IMPORTANTE AQUÍ:**
-        # Llama a update_idletasks para asegurar que todos los widgets creados por create_widgets()
-        # estén completamente renderizados y sus gestores de geometría hayan sido procesados.
+        # Establecer fondo de madera extraído del logo (si existe)
+        try:
+            # Llamar después de crear widgets para que las dimensiones estén disponibles
+            self.set_wood_background(os.path.join('assets', 'logo.png'))
+            # Actualizar al cambiar el tamaño de la ventana
+            self.root.bind('<Configure>', lambda e: self.set_wood_background(os.path.join('assets', 'logo.png')))
+        except Exception:
+            pass
+
+        # Cargar productos
         self.load_products()
+
+
+    def set_wood_background(self, image_path):
+        """Carga `image_path`, aplica un filtro sutil y lo usa como fondo escalado.
+        Si la ventana aún no tiene tamaño, usa el tamaño de pantalla.
+        """
+        try:
+            if not os.path.exists(image_path):
+                return
+            # Asegurar que dimensiones están disponibles
+            self.root.update_idletasks()
+            w = max(1, self.root.winfo_width())
+            h = max(1, self.root.winfo_height())
+
+            img = Image.open(image_path).convert('RGB')
+            # Escalar manteniendo aspecto y luego recortar al tamaño de la ventana
+            img = img.resize((w, h), Image.LANCZOS)
+            # Aplicar leve desenfoque para que no compita con elementos UI
+            try:
+                img = img.filter(ImageFilter.GaussianBlur(radius=1))
+            except Exception:
+                pass
+
+            self.background_image = ImageTk.PhotoImage(img)
+            if not hasattr(self, 'bg_label') or self.bg_label is None:
+                self.bg_label = tk.Label(self.root, image=self.background_image, bd=0)
+                self.bg_label.place(x=0, y=0, relwidth=1, relheight=1)
+                # Enviar al fondo
+                self.bg_label.lower()
+            else:
+                self.bg_label.config(image=self.background_image)
+                self.bg_label.lower()
+        except Exception as e:
+            print(f"No se pudo establecer fondo madera: {e}")
         
         
     
@@ -62,7 +151,7 @@ class POSApp:
         
         try:
             img = Image.open(imagen_fondo)
-            img = img.resize((self.root.winfo_screenwidth(), self.root.winfo_screenheight()), Image.ANTIALIAS)
+            img = img.resize((self.root.winfo_screenwidth(), self.root.winfo_screenheight()), Image.LANCZOS)
             self.background_image = ImageTk.PhotoImage(img)
             if self.bg_label is None:
                 self.bg_label = tk.Label(self.root, image=self.background_image)
@@ -84,7 +173,7 @@ class POSApp:
         for product in filtered_products:
             product_id, name, price, category, stock = product
             button_text = f"{name}\n${price:,.0f}"
-            btn = ttk.Button(self.product_buttons_frame, text=button_text,
+            btn = ttk.Button(self.product_buttons_frame, text=button_text, style='Product.TButton',
                             command=lambda p=(product_id, name, price): self.add_to_cart(p))
             btn.grid(row=row, column=col, padx=5, pady=5, sticky="nsew")
             col += 1
@@ -103,16 +192,40 @@ class POSApp:
             products_frame.grid(row=0, column=0, padx=10, pady=10, sticky="nsew")
             main_frame.grid_columnconfigure(0, weight=2) # Más espacio para productos
 
-        
-            self.product_buttons_frame = ttk.Frame(products_frame)
-            self.product_buttons_frame.pack(fill=tk.BOTH, expand=True)
+            # Canvas y Scrollbar para productos
+            canvas = tk.Canvas(products_frame, bg=self.PALETTE_BG1, highlightthickness=0)
+            scrollbar = ttk.Scrollbar(products_frame, orient="vertical", command=canvas.yview)
+            
+            self.product_buttons_frame = ttk.Frame(canvas)
+            self.product_buttons_frame.bind(
+                "<Configure>",
+                lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+            )
+
+            canvas_window = canvas.create_window((0, 0), window=self.product_buttons_frame, anchor="nw")
+            canvas.configure(yscrollcommand=scrollbar.set)
+
+            canvas.pack(side="left", fill="both", expand=True)
+            scrollbar.pack(side="right", fill="y")
+
+            # Ajustar ancho del frame interno al cambiar tamaño del canvas
+            def on_canvas_configure(event):
+                canvas.itemconfig(canvas_window, width=event.width)
+            canvas.bind("<Configure>", on_canvas_configure)
+
+            # Scroll con rueda del ratón
+            def _on_mousewheel(event):
+                canvas.yview_scroll(int(-1*(event.delta/120)), "units")
+            
+            canvas.bind("<MouseWheel>", _on_mousewheel)
+            self.product_buttons_frame.bind("<MouseWheel>", _on_mousewheel)
 
         # Sección de Carrito y Total (derecha)
         cart_frame = ttk.LabelFrame(main_frame, text="Carrito de Compras", padding="10")
         cart_frame.grid(row=0, column=1, padx=10, pady=10, sticky="nsew")
         main_frame.grid_columnconfigure(1, weight=1)
 
-        self.cart_listbox = tk.Listbox(cart_frame, height=15, font=('Arial', 12))
+        self.cart_listbox = tk.Listbox(cart_frame, height=15, font=('Arial', 12), bg=PALETTE_BG2, fg=PALETTE_DARK, highlightbackground=PALETTE_BG1)
         self.cart_listbox.pack(fill=tk.BOTH, expand=True, pady=5)
 
         ttk.Button(cart_frame, text="Eliminar del Carrito", command=self.remove_from_cart).pack(fill=tk.X, pady=2)
@@ -136,21 +249,29 @@ class POSApp:
         
         ttk.Button(cart_management_frame, text="💾 Guardar Carrito", command=self.save_current_cart).pack(side=tk.LEFT, expand=True, fill=tk.X, padx=2)
         ttk.Button(cart_management_frame, text="📂 Cargar Carrito", command=self.show_load_cart_modal).pack(side=tk.RIGHT, expand=True, fill=tk.X, padx=2)
+        ttk.Button(
+                    cart_management_frame,
+                    text="🕒 Pedidos pendientes",
+                    command=lambda: PendingOrdersModal(self.root, self)
+                ).pack(fill=tk.X, pady=4)
 
         ttk.Button(cart_frame, text="Actualizar pagina", command=self.reload).pack(fill="x", pady=10)
     
 
 
         # Menú de administración (opcional, podría ser una ventana separada)
-        admin_menu = tk.Menu(self.root)
+        admin_menu = tk.Menu(self.root, bg=PALETTE_BG2, fg=PALETTE_DARK, activebackground=PALETTE_ACCENT)
         self.root.config(menu=admin_menu)
-        file_menu = tk.Menu(admin_menu, tearoff=0)
+        file_menu = tk.Menu(admin_menu, tearoff=0, bg=PALETTE_BG2, fg=PALETTE_DARK, activebackground=PALETTE_ACCENT)
         admin_menu.add_cascade(label="Administración", menu=file_menu)
         file_menu.add_command(label="Gestionar Productos", command=self.manage_products)
         file_menu.add_command(label="Ver Facturas", command=self.view_facturas)
         file_menu.add_command(label="Estadísticas del Día", command=self.show_daily_statistics)
+        file_menu.add_command(label="Configurar Saldos Iniciales", command=self.set_initial_balances)
         file_menu.add_separator()
         file_menu.add_command(label="Reimprimir última factura", command=self.show_reprint_modal)
+        file_menu.add_separator()
+        file_menu.add_command(label="modo pro", command=self.modo_pro)
         file_menu.add_separator()
         file_menu.add_command(label="Salir", command=self.root.quit)
 
@@ -233,7 +354,7 @@ class POSApp:
                     if os.path.exists(ppath):
                         img = Image.open(ppath)
                         img = img.convert('RGBA')
-                        img = img.resize((96, 72), Image.ANTIALIAS)
+                        img = img.resize((96, 72), Image.LANCZOS)
                         photo = ImageTk.PhotoImage(img)
                         # Guardar referencia
                         self.product_images[product_id] = photo
@@ -242,10 +363,10 @@ class POSApp:
                     photo = None
 
             if photo:
-                btn = ttk.Button(self.product_buttons_frame, text=button_text, image=photo, compound='top',
+                btn = ttk.Button(self.product_buttons_frame, text=button_text, image=photo, compound='top', style='Product.TButton',
                                  command=lambda p=(product_id, name, price): self.add_to_cart(p))
             else:
-                btn = ttk.Button(self.product_buttons_frame, text=button_text,
+                btn = ttk.Button(self.product_buttons_frame, text=button_text, style='Product.TButton',
                                  command=lambda p=(product_id, name, price): self.add_to_cart(p))
             btn.grid(row=row, column=col, padx=5, pady=5, sticky="nsew")
             col += 1
@@ -339,6 +460,65 @@ class POSApp:
         ttk.Button(btn_frame, text="Guardar", command=save_with_name).pack(side=tk.LEFT, padx=5)
         ttk.Button(btn_frame, text="Cancelar", command=dialog.destroy).pack(side=tk.RIGHT, padx=5)
 
+    def save_pending(self):
+        payment_method = self.payment_var.get()
+
+        if not payment_method:
+            messagebox.showwarning(
+                "Método de pago",
+                "Selecciona un método de pago antes de guardar."
+            )
+            return
+
+        self.app.save_pending_order(
+            client=self.client,
+            address=self.address,
+            payment_method=payment_method
+        )
+        print("DEBUG pago:", self.payment_var.get())
+
+
+
+    def save_pending_order(self, client, address, payment_method):
+        if not self.cart:
+            messagebox.showwarning("Vacío", "No hay productos para guardar.")
+            return
+
+        dialog = tk.Toplevel(self.root)
+        dialog.title("Guardar Pedido Pendiente")
+        dialog.geometry("400x170")
+        dialog.transient(self.root)
+        dialog.grab_set()
+
+        ttk.Label(dialog, text="Nombre del pedido:", font=('Arial', 11, 'bold')).pack(pady=10)
+        entry = ttk.Entry(dialog)
+        entry.pack(fill=tk.X, padx=20)
+        entry.focus()
+
+        def guardar():
+            name = entry.get().strip()
+            if not name:
+                messagebox.showwarning("Error", "Ingresa un nombre.")
+                return
+
+            self.saved_carts[name] = {
+                "items": dict(self.cart),
+                "client": client,
+                "address": address,
+                "payment_method": payment_method
+            }
+
+            messagebox.showinfo("Guardado", f"Pedido '{name}' guardado.")
+            dialog.destroy()
+
+        btns = ttk.Frame(dialog)
+        btns.pack(fill=tk.X, pady=15, padx=20)
+
+        ttk.Button(btns, text="💾 Guardar", command=guardar).pack(side=tk.LEFT, expand=True, fill=tk.X, padx=5)
+        ttk.Button(btns, text="Cancelar", command=dialog.destroy).pack(side=tk.RIGHT, expand=True, fill=tk.X, padx=5)
+
+
+
     def show_load_cart_modal(self):
         """Muestra modal para seleccionar un carrito guardado."""
         if not self.saved_carts:
@@ -361,33 +541,9 @@ class POSApp:
         self.update_cart_display()
         messagebox.showinfo("Éxito", f"Carrito '{cart_name}' cargado.")
 
-    def process_sale(self):
-        """Procesa la venta y la registra en la base de datos."""
-        if not self.cart:
-            messagebox.showwarning("Advertencia", "El carrito está vacío. No hay venta que procesar.")
-            return
-
-        total_venta = float(self.total_label.cget("text").replace('$', '').replace(',', ''))
-        
-        # Preparar los items para el registro en la BD
-        items_to_record = []
-        for product_id, item_data in self.cart.items():
-            items_to_record.append({
-                'id': item_data['id'],
-                'cantidad': item_data['cantidad'],
-                'precio': item_data['precio']
-            })
-
-        try:
-            venta_id = db_manager.record_sale(total_venta, items_to_record)
-            messagebox.showinfo("Venta Exitosa", f"Venta registrada con ID: {venta_id}\nTotal: ${total_venta:,.0f}")
-            self.clear_cart()
-        except Exception as e:
-            messagebox.showerror("Error", f"No se pudo registrar la venta: {e}")
-
     def view_facturas(self):
         """Abre una nueva ventana para visualizar todas las facturas."""
-        FacturasWindow(self.root)
+        FacturasWindow(self.root, app=self)
 
     def show_daily_statistics(self):
         """Abre un selector de fecha y muestra estadísticas para la fecha elegida."""
@@ -452,11 +608,43 @@ class POSApp:
             metodos_pago = {}
             for factura in facturas_filtradas:
                 fact_id, num_factura, fecha_hora, cliente, metodo_pago, valor_total, observaciones = factura
-                if metodo_pago not in metodos_pago:
-                    metodos_pago[metodo_pago] = {'total': 0, 'cantidad': 0, 'facturas': []}
-                metodos_pago[metodo_pago]['total'] += valor_total
-                metodos_pago[metodo_pago]['cantidad'] += 1
-                metodos_pago[metodo_pago]['facturas'].append(factura)
+                
+                # Detectar si es pago dividido (formato: METHOD1|AMOUNT1+METHOD2|AMOUNT2)
+                if metodo_pago and '|' in metodo_pago and '+' in metodo_pago:
+                    # Pago dividido
+                    try:
+                        partes = metodo_pago.split('+')
+                        m1_info = partes[0].split('|')
+                        m2_info = partes[1].split('|')
+                        metodo1, monto1 = m1_info[0], float(m1_info[1])
+                        metodo2, monto2 = m2_info[0], float(m2_info[1])
+                        
+                        # Registrar ambos métodos con sus montos
+                        if metodo1 not in metodos_pago:
+                            metodos_pago[metodo1] = {'total': 0, 'cantidad': 0, 'facturas': []}
+                        metodos_pago[metodo1]['total'] += monto1
+                        metodos_pago[metodo1]['cantidad'] += 1
+                        metodos_pago[metodo1]['facturas'].append(factura)
+                        
+                        if metodo2 not in metodos_pago:
+                            metodos_pago[metodo2] = {'total': 0, 'cantidad': 0, 'facturas': []}
+                        metodos_pago[metodo2]['total'] += monto2
+                        metodos_pago[metodo2]['cantidad'] += 1
+                        metodos_pago[metodo2]['facturas'].append(factura)
+                    except Exception:
+                        # Si hay error parseando, tratarlo como método simple
+                        if metodo_pago not in metodos_pago:
+                            metodos_pago[metodo_pago] = {'total': 0, 'cantidad': 0, 'facturas': []}
+                        metodos_pago[metodo_pago]['total'] += valor_total
+                        metodos_pago[metodo_pago]['cantidad'] += 1
+                        metodos_pago[metodo_pago]['facturas'].append(factura)
+                else:
+                    # Pago simple
+                    if metodo_pago not in metodos_pago:
+                        metodos_pago[metodo_pago] = {'total': 0, 'cantidad': 0, 'facturas': []}
+                    metodos_pago[metodo_pago]['total'] += valor_total
+                    metodos_pago[metodo_pago]['cantidad'] += 1
+                    metodos_pago[metodo_pago]['facturas'].append(factura)
 
             mensaje = f"ESTADÍSTICAS DE VENTAS - {fecha_str}\n"
             mensaje += "=" * 50 + "\n\n"
@@ -473,11 +661,169 @@ class POSApp:
             mensaje += "=" * 50 + "\n"
             mensaje += f"TOTAL GENERAL: ${suma_total:,.0f}"
 
+            # Cálculo de totales específicos para Nequi y Daviplata (insensible a mayúsculas)
+            # Incluye montos de pagos divididos
+            total_nequi = 0
+            total_daviplata = 0
+            for factura in facturas_filtradas:
+                metodo_pago = factura[4] or ''
+                valor = factura[5]
+                
+                # Detectar pago dividido
+                if '|' in metodo_pago and '+' in metodo_pago:
+                    try:
+                        partes = metodo_pago.split('+')
+                        m1_info = partes[0].split('|')
+                        m2_info = partes[1].split('|')
+                        metodo1, monto1 = m1_info[0].strip(), float(m1_info[1])
+                        metodo2, monto2 = m2_info[0].strip(), float(m2_info[1])
+                        
+                        if metodo1.lower() == 'nequi':
+                            total_nequi += monto1
+                        if metodo2.lower() == 'nequi':
+                            total_nequi += monto2
+                        if metodo1.lower() == 'daviplata':
+                            total_daviplata += monto1
+                        if metodo2.lower() == 'daviplata':
+                            total_daviplata += monto2
+                    except Exception:
+                        if metodo_pago.strip().lower() == 'nequi':
+                            total_nequi += valor
+                        elif metodo_pago.strip().lower() == 'daviplata':
+                            total_daviplata += valor
+                else:
+                    # Pago simple
+                    if metodo_pago.strip().lower() == 'nequi':
+                        total_nequi += valor
+                    elif metodo_pago.strip().lower() == 'daviplata':
+                        total_daviplata += valor
+            final_nequi = self.saldo_nequi_inicio + total_nequi
+            final_daviplata = self.saldo_daviplata_inicio + total_daviplata
+            mensaje += "\n\nSaldos (inicio / ventas del día / final):\n"
+            mensaje += f"Nequi: ${self.saldo_nequi_inicio:,.0f} / ${total_nequi:,.0f} / ${final_nequi:,.0f}\n"
+            mensaje += f"Daviplata: ${self.saldo_daviplata_inicio:,.0f} / ${total_daviplata:,.0f} / ${final_daviplata:,.0f}\n"
+
             messagebox.showinfo("Estadísticas", mensaje)
+
+            # Generar PDF de estadísticas (incluyendo saldos iniciales)
+            self.generate_statistics_pdf(fecha_str, metodos_pago, suma_total, self.saldo_nequi_inicio, self.saldo_daviplata_inicio)
+
+            # Mostrar ventana detallada
             DailyStatisticsWindow(self.root, metodos_pago, fecha_str)
 
         # Abrir modal de selección de fecha
         DateSelectionModal(self.root, show_statistics_for_date)
+
+    def set_initial_balances(self):
+        """Muestra un modal para configurar los saldos iniciales de Nequi y Daviplata."""
+        dialog = tk.Toplevel(self.root)
+        dialog.title("Saldos Iniciales")
+        dialog.geometry("320x180")
+        dialog.transient(self.root)
+        dialog.grab_set()
+
+        ttk.Label(dialog, text="Saldo inicial Nequi:").pack(pady=(10, 2), anchor='w', padx=12)
+        nequi_entry = ttk.Entry(dialog)
+        nequi_entry.pack(fill=tk.X, padx=12)
+        nequi_entry.insert(0, f"{self.saldo_nequi_inicio}")
+
+        ttk.Label(dialog, text="Saldo inicial Daviplata:").pack(pady=(10, 2), anchor='w', padx=12)
+        daviplata_entry = ttk.Entry(dialog)
+        daviplata_entry.pack(fill=tk.X, padx=12)
+        daviplata_entry.insert(0, f"{self.saldo_daviplata_inicio}")
+
+        def save_balances():
+            try:
+                nequi_val = float(nequi_entry.get() or 0)
+                daviplata_val = float(daviplata_entry.get() or 0)
+            except ValueError:
+                messagebox.showerror("Error", "Introduce valores numéricos válidos.")
+                return
+            self.saldo_nequi_inicio = nequi_val
+            self.saldo_daviplata_inicio = daviplata_val
+            messagebox.showinfo("Saldos guardados", "Saldos iniciales actualizados correctamente.")
+            dialog.destroy()
+
+        btn_frame = ttk.Frame(dialog)
+        btn_frame.pack(fill=tk.X, pady=12, padx=12)
+        ttk.Button(btn_frame, text="Guardar", command=save_balances).pack(side=tk.LEFT, padx=5)
+        ttk.Button(btn_frame, text="Cancelar", command=dialog.destroy).pack(side=tk.RIGHT, padx=5)
+
+    def generate_statistics_pdf(self, fecha_str, metodos_pago, suma_total, nequi_inicio=0.0, daviplata_inicio=0.0):
+        """Genera un PDF con las estadísticas del día, incluyendo saldos iniciales y finales."""
+        try:
+            if not os.path.exists("estadisticas"):
+                os.makedirs("estadisticas")
+            
+            # Nombre del archivo con fecha
+            pdf_name = f"estadisticas/estadisticas_{fecha_str}.pdf"
+            c = canvas.Canvas(pdf_name, pagesize=(595, 842))  # A4
+            width, height = 595, 842
+            y = height - 40
+            
+            # Encabezado
+            c.setFont("Helvetica-Bold", 18)
+            c.drawString(50, y, "ESTADÍSTICAS DE VENTAS")
+            y -= 30
+            
+            c.setFont("Helvetica-Bold", 12)
+            c.drawString(50, y, f"Fecha: {fecha_str}")
+            y -= 30
+            
+            # Línea separadora
+            c.line(50, y, 545, y)
+            y -= 20
+            
+            # Datos por método de pago
+            c.setFont("Helvetica-Bold", 11)
+            c.drawString(50, y, "Resumen por Método de Pago:")
+            y -= 20
+            
+            c.setFont("Helvetica", 10)
+            for metodo in sorted(metodos_pago.keys()):
+                datos = metodos_pago[metodo]
+                total = datos['total']
+                cantidad = datos['cantidad']
+                
+                c.drawString(70, y, f"• {metodo}:")
+                y -= 15
+                c.drawString(90, y, f"Cantidad de ventas: {cantidad}")
+                y -= 12
+                c.drawString(90, y, f"Total: ${total:,.0f}")
+                y -= 18
+
+            # Línea separadora
+            c.line(50, y, 545, y)
+            y -= 20
+
+            # Totales y saldos específicos para Nequi/Daviplata (insensible a mayúsculas)
+            total_nequi = sum(v.get('total', 0) for k, v in metodos_pago.items() if (k or '').strip().lower() == 'nequi')
+            total_daviplata = sum(v.get('total', 0) for k, v in metodos_pago.items() if (k or '').strip().lower() == 'daviplata')
+            final_nequi = nequi_inicio + total_nequi
+            final_daviplata = daviplata_inicio + total_daviplata
+
+            c.setFont("Helvetica-Bold", 12)
+            c.drawString(50, y, f"TOTAL GENERAL: ${suma_total:,.0f}")
+            y -= 20
+
+            c.setFont("Helvetica-Bold", 11)
+            c.drawString(50, y, "Saldos Nequi / Daviplata:")
+            y -= 16
+            c.setFont("Helvetica", 10)
+            c.drawString(70, y, f"Nequi - Inicio: ${nequi_inicio:,.0f}  Ventas: ${total_nequi:,.0f}  Final: ${final_nequi:,.0f}")
+            y -= 14
+            c.drawString(70, y, f"Daviplata - Inicio: ${daviplata_inicio:,.0f}  Ventas: ${total_daviplata:,.0f}  Final: ${final_daviplata:,.0f}")
+            y -= 20
+
+            # Información adicional
+            c.setFont("Helvetica", 9)
+            c.drawString(50, y, f"Generado: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}")
+            c.drawString(50, y - 15, "El Panze - Sistema POS")
+            
+            c.save()
+            messagebox.showinfo("PDF Generado", f"Estadísticas guardadas en:\n{pdf_name}")
+        except Exception as e:
+            messagebox.showerror("Error", f"No se pudo generar el PDF: {e}")
 
     def manage_products(self):
         """Abre una nueva ventana para la gestión de productos."""
@@ -567,7 +913,7 @@ class POSApp:
                     os.makedirs('assets')
                 img = Image.open(image_path)
                 img = img.convert('RGBA')
-                img.thumbnail((300, 225), Image.ANTIALIAS)
+                img.thumbnail((300, 225), Image.LANCZOS)
                 dest_path = os.path.join('assets', f"{product_id}.png")
                 img.save(dest_path, format='PNG')
             except Exception as e:
@@ -602,8 +948,16 @@ class POSApp:
         """Abre un diálogo para seleccionar una imagen y muestra un preview pequeño."""
         from tkinter import filedialog
         try:
-            path = filedialog.askopenfilename(title="Seleccionar imagen del producto",
-                                              filetypes=[("Imágenes", "*.png;*.jpg;*.jpeg;*.bmp;*.gif" )])
+            path = filedialog.askopenfilename(
+                title="Seleccionar imagen del producto",
+                filetypes=[
+                    ("Imágenes PNG", "*.png"),
+                    ("Imágenes JPEG", "*.jpg;*.jpeg"),
+                    ("GIF", "*.gif"),
+                    ("BMP", "*.bmp"),
+                    ("Todos los archivos", "*.*")
+                ]
+            )
         except Exception:
             path = None
 
@@ -614,7 +968,7 @@ class POSApp:
         try:
             img = Image.open(path)
             img = img.convert('RGBA')
-            img.thumbnail((96, 72), Image.ANTIALIAS)
+            img.thumbnail((96, 72), Image.LANCZOS)
             self.prod_image_preview_photo = ImageTk.PhotoImage(img)
             self.prod_image_preview.config(image=self.prod_image_preview_photo)
         except Exception as e:
@@ -637,8 +991,45 @@ class POSApp:
             self._load_products_admin()
 
  
+    def modo_pro(self):
+        """Abre un modal para activar/desactivar el modo pro (botones de editar/eliminar en facturas)."""
+        dialog = tk.Toplevel(self.root)
+        dialog.title("Modo Pro")
+        dialog.geometry("400x200")
+        dialog.transient(self.root)
+        dialog.grab_set()
+
+        # Encabezado
+        ttk.Label(dialog, text="Control de Modo Pro", font=('Arial', 14, 'bold')).pack(pady=20)
+        
+        # Estado actual
+        estado_texto = "Activado" if self.modo_pro_activo else "Desactivado"
+        estado_label = ttk.Label(dialog, text=f"Estado actual: {estado_texto}", font=('Arial', 11))
+        estado_label.pack(pady=10)
+
+        # Descripción
+        ttk.Label(dialog, text="El modo pro habilita los botones de editar y eliminar\nen la ventana de facturas.", font=('Arial', 9), justify=tk.CENTER).pack(pady=10)
+
+        # Frame de botones
+        btn_frame = ttk.Frame(dialog)
+        btn_frame.pack(fill=tk.X, padx=20, pady=20)
+
+        def activar_modo_pro():
+            self.modo_pro_activo = True
+            estado_label.config(text="Estado actual: Activado")
+            messagebox.showinfo("Modo Pro", "✓ Modo Pro activado correctamente.\nLos botones de editar y eliminar están habilitados.")
+
+        def desactivar_modo_pro():
+            self.modo_pro_activo = False
+            estado_label.config(text="Estado actual: Desactivado")
+            messagebox.showinfo("Modo Pro", "✗ Modo Pro desactivado correctamente.\nLos botones de editar y eliminar están deshabilitados.")
+
+        ttk.Button(btn_frame, text="✓ Activar", command=activar_modo_pro).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=5)
+        ttk.Button(btn_frame, text="✗ Desactivar", command=desactivar_modo_pro).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=5)
+        ttk.Button(btn_frame, text="Cerrar", command=dialog.destroy).pack(side=tk.RIGHT, fill=tk.X, expand=True, padx=5)
+
     def load_categories(self):
-        # Placeholder function: Replace with actual implementation
+        # Función placeholder: Reemplazar con implementación real
         print("Loading categories...")
         self.categories = []  # or fetch from a file/database
 
@@ -657,7 +1048,7 @@ class POSApp:
             total_with_shipping = total + shipping_cost
             
             # Modal 2: Seleccionar método de pago
-            def on_payment_method(method, amount_paid, change):
+            def on_payment_method(method_or_tuple, amount_paid, change):
                 items = []
                 for k, item in self.cart.items():
                     items.append({
@@ -667,25 +1058,68 @@ class POSApp:
                         "precio": item["precio"]
                     })
                 
+                # Detectar si es pago dividido (tupla) o pago simple (string)
+                if isinstance(method_or_tuple, tuple):
+                    # Pago dividido: (method1, method2, amount1, amount2)
+                    method1, method2, amount1, amount2 = method_or_tuple
+                    payment_info = f"{method1} (${amount1:,.0f}) + {method2} (${amount2:,.0f})".replace(",", ".")
+                    method_display = method1  # Para register_sale usaremos el primer método
+                    is_split = True
+                    split_data = (method1, method2, amount1, amount2)
+                else:
+                    # Pago simple
+                    method_display = method_or_tuple
+                    payment_info = f"{method_display} (${total_with_shipping:,.0f})".replace(",", ".")
+                    is_split = False
+                    split_data = None
+                
                 # Modal 3: Capturar observaciones de cada producto
                 def on_observations_saved(observations):
-                    venta_id = db_manager.record_sale(total_with_shipping, items, cliente=client, metodo_pago=method, observaciones=observations)
-
-                    # Recargar productos en UI para ocultar los que quedaron sin stock
                     try:
-                        self.load_products()
-                    except Exception:
-                        pass
+                        venta_id = db_manager.record_sale(total_with_shipping, items, cliente=client, metodo_pago=method_display, observaciones=observations, split_payment=split_data)
 
-                    # Generar factura con detalles de pago, dirección y observaciones
-                    self.generate_invoice_pdf(venta_id, items, total_with_shipping, cliente=client, dirrecion=address, metodo_pago=method, cambio=change, observaciones=observations)
+                        # Recargar productos en UI para ocultar los que quedaron sin stock
+                        try:
+                            self.load_products()
+                        except Exception as e:
+                            print(f"Error recargando productos: {e}")
 
-                    messagebox.showinfo("Venta Registrada", f"Venta #{venta_id} completada con éxito.\nDirección: {address}\nMétodo: {method}")
-                    self.clear_cart()
+                        # Generar factura con detalles de pago, dirección y observaciones
+                        try:
+                            if is_split:
+                                method1, method2, amount1, amount2 = split_data
+                                self.generate_invoice_pdf(venta_id, items, total_with_shipping, cliente=client, dirrecion=address, 
+                                                        metodo_pago=method_display, cambio=change, observaciones=observations,
+                                                        split_payment=(method1, method2, amount1, amount2))
+                            else:
+                                self.generate_invoice_pdf(venta_id, items, total_with_shipping, cliente=client, dirrecion=address, 
+                                                        metodo_pago=method_display, cambio=change, observaciones=observations)
+                        except Exception as e:
+                            messagebox.showerror("Error en PDF/Impresión", f"La venta se registró pero hubo error al generar/imprimir factura: {e}")
+
+                        messagebox.showinfo("Venta Registrada", f"Venta #{venta_id} completada con éxito.\nDirección: {address}\nMétodo: {payment_info}")
+                        self.clear_cart()
+                        
+                        # Abrir ventana de facturas para mostrar la nueva factura
+                        try:
+                            FacturasWindow(self.root, app=self)
+                        except Exception as e:
+                            print(f"Error abriendo FacturasWindow: {e}")
+                            
+                    except Exception as e:
+                        messagebox.showerror("Error en la venta", f"No se pudo completar la venta: {e}")
+                        print(f"Error completo en on_observations_saved: {e}")
+                        import traceback
+                        traceback.print_exc()
                 
                 ObservationsModal(self.root, items, on_observations_saved)
             
-            PaymentMethodModal(self.root, total_with_shipping, on_payment_method)
+            PaymentMethodModal( self.root,
+                                total_with_shipping,
+                                on_payment_method,
+                                app=self,
+                                client=client,
+                                address=address)
         
         AddressModal(self.root, on_address_selected)
        
@@ -707,7 +1141,7 @@ class POSApp:
     # ------------------- FACTURA PDF -------------------
 
     def generate_invoice_pdf(self, venta_id, items, total, cliente="Cliente General", dirrecion="Sin Dirección",
-                         metodo_pago="Efectivo", cambio=0, observaciones=None, ruta_salida="factura.pdf",Image_path="assets/logo_impresora.jpg"):
+                         metodo_pago="Efectivo", cambio=0, observaciones=None, ruta_salida="factura.pdf",Image_path="assets/logo_impresora.jpg", split_payment=None):
     
         # Crear carpeta de facturas si no existe
         import os
@@ -753,8 +1187,19 @@ class POSApp:
         c.setFont("Helvetica-Bold", 8)
         c.drawString(0, y, "Método de pago:")
         c.setFont("Helvetica", 8)
-        c.drawString(67, y, f"{metodo_pago}")
-        y -= 30
+        # Mostrar método o métodos divididos
+        if split_payment:
+            method1, method2, amount1, amount2 = split_payment
+            metodo_texto = f"{method1}: ${amount1:,.0f} + {method2}: ${amount2:,.0f}".replace(",", ".")
+        else:
+            metodo_texto = f"{metodo_pago}"
+        c.drawString(67, y, metodo_texto[:50])  # Limitar a 50 caracteres
+        y -= 10
+        if split_payment and len(metodo_texto) > 50:
+            c.setFont("Helvetica", 7)
+            c.drawString(67, y, metodo_texto[50:])
+            y -= 10
+        y -= 20
 
         # TABLA
         c.setFont("Helvetica-Bold", 8)
@@ -871,13 +1316,56 @@ class POSApp:
             'cambio': cambio
         }
         
-        # Preguntar si desea sacar copia
-        if messagebox.askyesno("Imprimir Factura", "¿Deseas sacar copia de la factura?"):
-            self._imprimir_factura(ruta_salida)  
-            self._imprimir_factura(ruta_salida)
-        else:      
-            self._imprimir_factura(ruta_salida)
+        # Imprimir factura principal
+       # try:
+        #    self._imprimir_factura(ruta_salida)
+        #except Exception as e:
+        #    messagebox.showwarning("Impresión", f"No se pudo imprimir la factura: {e}")
 
+        # Preguntar si desea una copia adicional
+        if messagebox.askyesno("Imprimir copia", "¿Deseas imprimir una copia adicional de la factura?"):
+            try:
+                self._imprimir_factura(ruta_salida)
+            except Exception as e:
+                messagebox.showwarning("Impresión", f"No se pudo imprimir la copia: {e}")
+
+    def save_pending_order(self, client, address, payment_method):
+        if not self.cart:
+            messagebox.showwarning("Vacío", "No hay productos para guardar.")
+            return
+
+        dialog = tk.Toplevel(self.root)
+        dialog.title("Guardar Pedido Pendiente")
+        dialog.geometry("400x170")
+        dialog.transient(self.root)
+        dialog.grab_set()
+
+        ttk.Label(dialog, text="Nombre del pedido:", font=('Arial', 11, 'bold')).pack(pady=10)
+        entry = ttk.Entry(dialog)
+        entry.pack(fill=tk.X, padx=20)
+        entry.focus()
+
+        def guardar():
+            name = entry.get().strip()
+            if not name:
+                messagebox.showwarning("Error", "Ingresa un nombre.")
+                return
+
+            self.saved_carts[name] = {
+                "items": dict(self.cart),
+                "client": client,
+                "address": address,
+                "payment_method": payment_method
+            }
+
+            messagebox.showinfo("Guardado", f"Pedido '{name}' guardado.")
+            dialog.destroy()
+
+        btns = ttk.Frame(dialog)
+        btns.pack(fill=tk.X, pady=15, padx=20)
+
+        ttk.Button(btns, text="💾 Guardar", command=guardar).pack(side=tk.LEFT, expand=True, fill=tk.X, padx=5)
+        ttk.Button(btns, text="Cancelar", command=dialog.destroy).pack(side=tk.RIGHT, expand=True, fill=tk.X, padx=5)
 
 #ttk.Radiobutton(copias_frame, text="1 copia", variable=self.copias_var, value=1).pack(side=tk.LEFT, padx=10)
         #ttk.Radiobutton(copias_frame, text="2 copias", variable=self.copias_var, value=2).pack(side=tk.LEFT, padx=10)
@@ -922,7 +1410,7 @@ class LoadCartModal(tk.Toplevel):
         scrollbar = ttk.Scrollbar(frame)
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
         
-        self.listbox = tk.Listbox(frame, font=('Arial', 11), yscrollcommand=scrollbar.set)
+        self.listbox = tk.Listbox(frame, font=('Arial', 11), yscrollcommand=scrollbar.set, bg=PALETTE_BG2, fg=PALETTE_DARK, highlightbackground=PALETTE_BG1)
         self.listbox.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         scrollbar.config(command=self.listbox.yview)
         
@@ -963,6 +1451,96 @@ class LoadCartModal(tk.Toplevel):
             self.listbox.delete(selection[0])
             messagebox.showinfo("Eliminado", f"Carrito '{cart_name}' eliminado.")
 
+
+class PendingOrdersModal(tk.Toplevel):
+    def __init__(self, parent, app):
+        super().__init__(parent)
+        self.app = app
+        self.title("Pedidos Pendientes")
+        self.geometry("520x400")
+        self.transient(parent)
+        self.grab_set()
+
+        ttk.Label(self, text="📦 Pedidos Pendientes", font=('Arial', 14, 'bold')).pack(pady=10)
+
+        self.listbox = tk.Listbox(self, font=('Arial', 11))
+        self.listbox.pack(fill=tk.BOTH, expand=True, padx=15, pady=10)
+
+        self.orders = []
+        self.load_orders()
+
+        btns = ttk.Frame(self)
+        btns.pack(fill=tk.X, padx=15, pady=10)
+
+        ttk.Button(btns, text="🔄 Cargar", command=self.load_selected).pack(side=tk.LEFT, expand=True, fill=tk.X, padx=5)
+        ttk.Button(btns, text="🗑️ Eliminar", command=self.delete_selected).pack(side=tk.LEFT, expand=True, fill=tk.X, padx=5)
+        ttk.Button(btns, text="Cerrar", command=self.destroy).pack(side=tk.RIGHT)
+
+    def load_orders(self):
+        self.listbox.delete(0, tk.END)
+        self.orders.clear()
+
+        self.app.cursor.execute("""
+            SELECT id, name, client, address, payment_method
+            FROM pending_orders
+            ORDER BY created_at DESC
+        """)
+
+        for row in self.app.cursor.fetchall():
+            self.orders.append(row)
+            self.listbox.insert(tk.END, f"{row[1]} - {row[2]}")
+
+    def load_selected(self):
+        sel = self.listbox.curselection()
+        if not sel:
+            return
+
+        order_id, name, client, address, payment_method = self.orders[sel[0]]
+
+        # Cargar items
+        self.app.cursor.execute("""
+            SELECT product_name, price, quantity
+            FROM pending_order_items
+            WHERE order_id=?
+        """, (order_id,))
+
+        self.app.cart.clear()
+
+        for name_p, price, qty in self.app.cursor.fetchall():
+            self.app.cart[name_p] = {
+                "nombre": name_p,
+                "precio": price,
+                "cantidad": qty
+            }
+
+        self.app.update_cart_display()
+
+        total = self.app.calculate_total()
+
+        PaymentMethodModal(
+            self.app.root,
+            total,
+            callback=lambda m: None,
+            app=self.app,
+            client=client,
+            address=address,
+            payment_method=payment_method
+        )
+
+        self.destroy()
+
+    def delete_selected(self):
+        sel = self.listbox.curselection()
+        if not sel:
+            return
+
+        order_id = self.orders[sel[0]][0]
+
+        if messagebox.askyesno("Eliminar", "Eliminar este pedido pendiente?"):
+            self.app.cursor.execute("DELETE FROM pending_order_items WHERE order_id=?", (order_id,))
+            self.app.cursor.execute("DELETE FROM pending_orders WHERE id=?", (order_id,))
+            self.app.conn.commit()
+            self.load_orders()
 
 class ObservationsModal(tk.Toplevel):
     """Modal para capturar observaciones de cada producto en el carrito."""
@@ -1010,7 +1588,7 @@ class ObservationsModal(tk.Toplevel):
             item_frame.pack(fill=tk.X, padx=10, pady=5)
             
             # Text widget para observaciones
-            obs_text = tk.Text(item_frame, height=3, width=50, font=('Arial', 9))
+            obs_text = tk.Text(item_frame, height=3, width=50, font=('Arial', 9), bg=PALETTE_BG2, fg=PALETTE_DARK)
             obs_text.pack(fill=tk.X)
             
             self.observations_entries[product_name] = obs_text
@@ -1038,11 +1616,12 @@ class ObservationsModal(tk.Toplevel):
 
 class FacturasWindow(tk.Toplevel):
     """Ventana para visualizar y gestionar todas las facturas."""
-    def __init__(self, parent):
+    def __init__(self, parent, app=None):
         super().__init__(parent)
         self.title("Panel de Facturas")
         self.geometry("1000x600")
         self.resizable(True, True)
+        self.app = app  # Referencia a la instancia de POSApp
         
         self.create_widgets()
         self.selected_factura_id = None
@@ -1202,8 +1781,14 @@ class FacturasWindow(tk.Toplevel):
                 self.selected_factura_id = int(values[0])
             except Exception:
                 self.selected_factura_id = None
-            self.edit_btn.config(state='normal')
-            self.delete_btn.config(state='normal')
+            
+            # Habilitar botones solo si modo pro está activo
+            if self.app and self.app.modo_pro_activo:
+                self.edit_btn.config(state='normal')
+                self.delete_btn.config(state='normal')
+            else:
+                self.edit_btn.config(state='disabled')
+                self.delete_btn.config(state='disabled')
         else:
             self.selected_factura_id = None
             self.edit_btn.config(state='disabled')
@@ -1321,7 +1906,7 @@ class AutocompleteEntry(ttk.Entry):
         self.listbox_visible = False
 
         # Listbox flotante
-        self.lb = tk.Listbox(master, height=8, font=('Arial', 10), bg='white', selectmode=tk.SINGLE)
+        self.lb = tk.Listbox(master, height=8, font=('Arial', 10), bg=PALETTE_BG2, fg=PALETTE_DARK, selectmode=tk.SINGLE)
         self.lb.bind("<<ListboxSelect>>", self._seleccionar_item)
         self.bind("<Down>", self._down_key)
         self.bind("<Escape>", self._hide_listbox)
@@ -1416,50 +2001,18 @@ class AddressModal(tk.Toplevel):
         self.selected_address = None
         self.shipping_cost = 0
         
-        self.direcciones = [
-            "Batará", "Aracari", "Milano", "Ibis", "Amazilia", "Jilguero", "Alondra", "Tángara", "Andaríos", "Frontino",
-            "Sie 1", "Sie 2", "Sie 3", "Sie 4","andarios",
-            "Tángara", "", "Frontino",'bosques alizos','bosques arrayan ','altamorada',
-            "Taller Motos",
-            "al frente iglesia",
-            "Torre de San Juan 1B", "Torre de San Juan 2B", "Torre de San Juan 3B", "Torre de San Juan 4B", "Torre de San Juan 5B",
-            "Torre de San Juan 6B", "Torre de San Juan 7B", "Torre de San Juan 8B", "Torre de San Juan 9B", "Torre de San Juan 10B",
-            "Torre de San Juan 11B", "Torre de San Juan 12B", "Torre de San Juan 13B", "Torre de San Juan 14B", "Torre de San Juan 15B",
-            "Torre de San Juan 16B", "Torre de San Juan 17B", "Torre de San Juan 18B", "Torre de San Juan 19B", "Torre de San Juan 20B",
-            "Torre de San Juan 21B", "Torre de San Juan 22B", "Torre de San Juan 23B", "Torre de San Juan 24B", "Torre de San Juan 25B",
-            "Torre de San Juan 26B", "Torre de San Juan 27B", "Torre de San Juan 28B", "Torre de San Juan 29B", "Torre de San Juan 30B",
-            "Torre de San Juan 31B", "Torre de San Juan 32B", "Torre de San Juan 33B", "Torre de San Juan 34B", "Torre de San Juan 35B",
-            "Torre de San Juan 36B", "Torre de San Juan 37B", "Torre de San Juan 38B",
-            "San javier 1", "San javier 2", "San javier 3", "San javier 4", "San javier 5", "San javier 6", "San javier 7",
-            "San javier 8", "San javier 9", "San javier 10", "San javier 11", "San javier 12", "San javier 13", "San javier 14",
-            "San javier 15", "San javier 16", "San javier 17", "San javier 18", "San javier 19", "San javier 20","San javier 21",
-            "San javier 22", "San javier 23", "San javier 24", "San javier 25", "San javier 26", "San javier 27", "San javier 28",
-            "San javier 29", "San javier 30", "San javier 31", "San javier 32", "San javier 33", "San javier 34","pago punto"
+        # Cargar direcciones desde la base de datos (si está vacía, se siembran las por defecto)
+        try:
+            db_manager.ensure_default_addresses()
+            self.direcciones = db_manager.get_all_addresses()
+        except Exception:
+            # Fallback mínimo si hay problemas con la DB
+            self.direcciones = ["Sin conexión a DB"]
         
-        
-        ]
-        
-        self.free_addresses = [
-            "Batará", "Aracari", "Milano", "Ibis", "Amazilia", "Jilguero", "Andaríos",
-            "Tángara", "", "Frontino",'bosques alizos','bosques arrayan ','altamorada',
-            "andarios","Taller Motos",
-            "Sie 1", "Sie 2", "Sie 3", "Sie 4",
-             "al frente iglesia",
-            "Torre de San Juan 1B", "Torre de San Juan 2B", "Torre de San Juan 3B", "Torre de San Juan 4B", "Torre de San Juan 5B",
-            "Torre de San Juan 6B", "Torre de San Juan 7B", "Torre de San Juan 8B", "Torre de San Juan 9B", "Torre de San Juan 10B",
-            "Torre de San Juan 11B", "Torre de San Juan 12B", "Torre de San Juan 13B", "Torre de San Juan 14B", "Torre de San Juan 15B",
-            "Torre de San Juan 16B", "Torre de San Juan 17B", "Torre de San Juan 18B", "Torre de San Juan 19B", "Torre de San Juan 20B",
-            "Torre de San Juan 21B", "Torre de San Juan 22B", "Torre de San Juan 23B", "Torre de San Juan 24B", "Torre de San Juan 25B",
-            "Torre de San Juan 26B", "Torre de San Juan 27B", "Torre de San Juan 28B", "Torre de San Juan 29B", "Torre de San Juan 30B",
-            "Torre de San Juan 31B", "Torre de San Juan 32B", "Torre de San Juan 33B", "Torre de San Juan 34B", "Torre de San Juan 35B",
-            "Torre de San Juan 36B", "Torre de San Juan 37B", "Torre de San Juan 38B",
-            "San javier 1", "San javier 2", "San javier 3", "San javier 4", "San javier 5", "San javier 6", "San javier 7",
-            "San javier 8", "San javier 9", "San javier 10", "San javier 11", "San javier 12", "San javier 13", "San javier 14",
-            "San javier 15", "San javier 16", "San javier 17", "San javier 18", "San javier 19", "San javier 20","San javier 21",
-            "San javier 22", "San javier 23", "San javier 24", "San javier 25", "San javier 26", "San javier 27", "San javier 28",
-            "San javier 29", "San javier 30", "San javier 31", "San javier 32", "San javier 33", "San javier 34","pago punto"
-        
-        ]
+        try:
+            self.free_addresses = db_manager.get_free_addresses()
+        except Exception:
+            self.free_addresses = []
         
         self.create_widgets()
         self.transient(parent)
@@ -1517,12 +2070,12 @@ class AddressModal(tk.Toplevel):
                     self.info_label.config(text="✓ Envío incluido", foreground="green")
                     self.shipping_cost = 0
                 else:
-                    self.info_label.config(text="🚚 Costo de envío: $3.000", foreground="orange")
-                    self.shipping_cost = 3000
+                    self.info_label.config(text="🚚 Costo de envío: $3.000", foreground="red")
+                    self.shipping_cost = 0
             else:
                 # Dirección personalizada (no en la lista)
-                self.info_label.config(text="🚚 Costo de envío: $3.000", foreground="orange")
-                self.shipping_cost = 3000
+                self.info_label.config(text="🚚 Costo de envío: $3.000", foreground="red")
+                self.shipping_cost = 0
         else:
             # Si está vacío, limpiar
             self.selected_label.config(text="Dirección seleccionada: Ninguna")
@@ -1542,13 +2095,19 @@ class AddressModal(tk.Toplevel):
         self.destroy()
 class PaymentMethodModal(tk.Toplevel):
     """Modal para seleccionar método de pago."""
-    def __init__(self, parent, total, callback):
+    def __init__(self, parent, total, callback, app, client, address):
         super().__init__(parent)
+        self.app = app
+        self.client = client
+        self.address = address
+        self.callback = callback
+        self.total = total
         self.title("¿Cómo deseas pagar?")
         self.geometry("400x450")
         self.resizable(False, False)
         self.callback = callback
         self.total = total
+        
         
         self.create_widgets()
         self.transient(parent)
@@ -1566,7 +2125,18 @@ class PaymentMethodModal(tk.Toplevel):
         ttk.Button(button_frame, text="💵 EFECTIVO", command=lambda: self.select_payment('EFECTIVO')).pack(fill=tk.X, pady=5)
         ttk.Button(button_frame, text="💳 NEQUI", command=lambda: self.select_payment('NEQUI')).pack(fill=tk.X, pady=5)
         ttk.Button(button_frame, text="💳 DAVIPLATA", command=lambda: self.select_payment('DAVIPLATA')).pack(fill=tk.X, pady=5)
+        ttk.Button(button_frame, text="🔀 PAGO DIVIDIDO", command=self.select_split_payment).pack(fill=tk.X, pady=5)
         
+        ttk.Button(button_frame,
+            text="💾 Guardar pedido pendiente",
+            command=lambda: self.app.save_pending_order(
+                client=self.client,
+                address=self.address,
+                payment_method=self.selected_method
+            )
+        ).pack(fill=tk.X, pady=5)
+
+
     def select_payment(self, method):
         if method == 'EFECTIVO':
             self.destroy()
@@ -1574,6 +2144,151 @@ class PaymentMethodModal(tk.Toplevel):
         else:
             self.callback(method, self.total, 0)
             self.destroy()
+    
+    def select_split_payment(self):
+        """Abre modal para pago dividido entre dos métodos."""
+        self.destroy()
+        SplitPaymentModal(self.master, self.total, self.callback)
+
+
+class CashPaymentModal(tk.Toplevel):
+    """Modal para pago en efectivo."""
+    def __init__(self, parent, total, callback):
+        super().__init__(parent)
+        self.title("Pago en Efectivo")
+        self.geometry("450x600")
+        self.resizable(False, False)
+        self.callback = callback
+        self.total = total
+        
+        self.create_widgets()
+        self.transient(parent)
+        self.grab_set()
+    
+    def create_widgets(self):
+        main_frame = ttk.Frame(self)
+        main_frame.pack(fill=tk.BOTH, expand=True, padx=15, pady=15)
+
+
+class SplitPaymentModal(tk.Toplevel):
+    """Modal para pago dividido entre dos métodos de pago."""
+    def __init__(self, parent, total, callback):
+        super().__init__(parent)
+        self.title("Pago Dividido")
+        self.geometry("500x500")
+        self.resizable(False, False)
+        self.callback = callback
+        self.total = total
+        self.method1 = None
+        self.amount1 = 0
+        self.method2 = None
+        self.amount2 = 0
+        self.current_step = 1  # 1 o 2
+        
+        self.create_widgets()
+        self.transient(parent)
+        self.grab_set()
+    
+    def create_widgets(self):
+        main_frame = ttk.Frame(self)
+        main_frame.pack(fill=tk.BOTH, expand=True, padx=15, pady=15)
+        
+        ttk.Label(main_frame, text="Pago Dividido", font=('Arial', 16, 'bold')).pack(pady=10)
+        ttk.Label(main_frame, text=f"Total a pagar: ${self.total:,.0f}".replace(",", "."), 
+                  font=('Arial', 12)).pack(pady=10)
+        
+        # Frame para mostrar progreso
+        self.progress_label = ttk.Label(main_frame, text="Paso 1 de 2: Selecciona primer método de pago", 
+                                        font=('Arial', 10, 'italic'))
+        self.progress_label.pack(pady=10)
+        
+        # Frame para los botones de método de pago
+        self.button_frame = ttk.Frame(main_frame)
+        self.button_frame.pack(fill=tk.BOTH, expand=True, pady=15)
+        
+        self.show_method_selection(1)
+    
+    def show_method_selection(self, step):
+        """Muestra la selección de método para el paso indicado."""
+        # Limpiar frame anterior
+        for widget in self.button_frame.winfo_children():
+            widget.destroy()
+        
+        self.current_step = step
+        self.progress_label.config(text=f"Paso {step} de 2: Selecciona el método de pago #{step}")
+        
+        ttk.Button(self.button_frame, text="💵 EFECTIVO", 
+                   command=lambda: self.select_method(step, 'EFECTIVO')).pack(fill=tk.X, pady=5)
+        ttk.Button(self.button_frame, text="💳 NEQUI", 
+                   command=lambda: self.select_method(step, 'NEQUI')).pack(fill=tk.X, pady=5)
+        ttk.Button(self.button_frame, text="💳 DAVIPLATA", 
+                   command=lambda: self.select_method(step, 'DAVIPLATA')).pack(fill=tk.X, pady=5)
+    
+    def select_method(self, step, method):
+        """Selecciona el método y pide el monto."""
+        if step == 1:
+            self.method1 = method
+            if method == 'EFECTIVO':
+                self.show_amount_input(1)
+            else:
+                # Para métodos digitales, permitir ingresar monto
+                self.show_amount_input(1)
+        elif step == 2:
+            self.method2 = method
+            if method == 'EFECTIVO':
+                self.show_amount_input(2)
+            else:
+                self.show_amount_input(2)
+    
+    def show_amount_input(self, step):
+        """Muestra input para capturar monto del pago."""
+        # Limpiar frame
+        for widget in self.button_frame.winfo_children():
+            widget.destroy()
+        
+        remaining = self.total - (self.amount1 if step == 2 else 0)
+        
+        ttk.Label(self.button_frame, text=f"¿Cuánto pagas con {self.method1 if step == 1 else self.method2}?", 
+                  font=('Arial', 12, 'bold')).pack(pady=10)
+        ttk.Label(self.button_frame, text=f"Monto pendiente: ${remaining:,.0f}".replace(",", "."), 
+                  font=('Arial', 10)).pack(pady=5)
+        
+        amount_entry = ttk.Entry(self.button_frame, font=('Arial', 12), width=25)
+        amount_entry.pack(pady=10, ipady=5)
+        amount_entry.focus()
+        
+        def confirm_amount():
+            try:
+                amount = float(amount_entry.get().replace(".", ""))
+                
+                if step == 1:
+                    if amount <= 0 or amount > self.total:
+                        messagebox.showwarning("Error", f"El monto debe estar entre 0 y ${self.total:,.0f}")
+                        return
+                    self.amount1 = amount
+                    remaining_for_step2 = self.total - self.amount1
+                    
+                    # Pasar al siguiente paso
+                    self.show_method_selection(2)
+                elif step == 2:
+                    remaining = self.total - self.amount1
+                    if amount <= 0 or amount > remaining + 1:  # +1 para permitir pequeños redondes
+                        messagebox.showwarning("Error", f"El monto debe estar entre 0 y ${remaining:,.0f}")
+                        return
+                    self.amount2 = amount
+                    
+                    # Completar el pago dividido
+                    self.complete_split_payment()
+            except ValueError:
+                messagebox.showwarning("Error", "Por favor ingresa un monto válido.")
+        
+        ttk.Button(self.button_frame, text="Confirmar", command=confirm_amount).pack(pady=10, ipadx=20)
+    
+    def complete_split_payment(self):
+        """Completa el pago dividido y devuelve los datos al callback."""
+        # Pasar datos como tupla: (method1, method2, amount1, amount2)
+        self.callback((self.method1, self.method2, self.amount1, self.amount2), None, None)
+        self.destroy()
 
 
 class CashPaymentModal(tk.Toplevel):
@@ -1820,5 +2535,3 @@ class DailyStatisticsWindow(tk.Toplevel):
         
         tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-
-
