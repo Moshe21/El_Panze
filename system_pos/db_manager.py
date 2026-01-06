@@ -40,6 +40,18 @@ def insert_factura_pdf(num_factura, fecha, nom_cliente, direccion, metodo_pago, 
     conn.close()
     print("🧾 INSERT REAL →", num_factura, producto)
 
+def get_all_facturas_completas():
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    try:
+        cursor.execute("SELECT * FROM facturas_completas")
+        rows = cursor.fetchall()
+        columns = [description[0] for description in cursor.description] if cursor.description else []
+        return columns, rows
+    except Exception:
+        return [], []
+    finally:
+        conn.close()
 
 def connect_db():
     """Establece conexión con la base de datos."""

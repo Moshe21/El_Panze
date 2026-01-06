@@ -287,6 +287,7 @@ class POSApp:
         file_menu.add_separator()
         file_menu.add_command(label="crear factura empresa", command=self.crear_factura_empresa)
         file_menu.add_command(label="modo pro", command=self.modo_pro)
+        file_menu.add_command(label="Exportar Facturas PDF (Excel)", command=self.export_facturas_completas_excel)
         file_menu.add_separator()
         file_menu.add_command(label="Salir", command=self.root.quit)
 
@@ -1107,6 +1108,33 @@ class POSApp:
             tk.messagebox.showinfo("PDF generado", f"Factura PDF guardada en: {pdf_path}")
 
         tk.Button(win, text="Guardar como PDF", command=guardar_pdf, font=("Arial", 12, "bold"), bg=self.PALETTE_ACCENT, fg="white").grid(row=len(campos)+2, column=0, columnspan=2, pady=20)
+
+    def export_facturas_completas_excel(self):
+        import csv
+        from tkinter import filedialog
+        
+        columns, rows = db_manager.get_all_facturas_completas()
+        
+        if not rows:
+            messagebox.showinfo("Información", "No hay datos en la tabla 'facturas_completas'.")
+            return
+
+        filename = filedialog.asksaveasfilename(
+            title="Exportar Facturas Completas a Excel",
+            defaultextension=".csv",
+            filetypes=[("Archivo CSV", "*.csv"), ("Todos los archivos", "*.*")]
+        )
+        
+        if filename:
+            try:
+                # Se usa utf-8-sig para compatibilidad con Excel y delimitador ';'
+                with open(filename, 'w', newline='', encoding='utf-8-sig') as f:
+                    writer = csv.writer(f, delimiter=';')
+                    writer.writerow(columns)
+                    writer.writerows(rows)
+                messagebox.showinfo("Éxito", f"Se exportó correctamente a:\n{filename}")
+            except Exception as e:
+                messagebox.showerror("Error", f"No se pudo exportar: {e}")
 
     def modo_pro(self):
         """Abre un modal para activar/desactivar el modo pro (botones de editar/eliminar en facturas)."""
