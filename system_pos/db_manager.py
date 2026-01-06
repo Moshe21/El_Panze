@@ -1,6 +1,45 @@
 import sqlite3
+import os
 
-DATABASE_NAME = "data/pos_database.db"
+DATABASE_NAME = "data/pos_database.db" # <--- RUTA DE BASE DE DATOS
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DB_PATH = os.path.join(BASE_DIR, "data", "pos_database.db")
+# --- FACTURAS PDF EN BASE DE DATOS ---
+# --- FACTURAS PDF EN BASE DE DATOS (estructura por producto) ---
+def create_facturas_pdf_table():
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS facturas_completas(
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            num_factura TEXT,
+            fecha TEXT,
+            nom_cliente TEXT,
+            direccion TEXT,
+            metodo_pago TEXT,
+            cantidad INTEGER,
+            producto TEXT,
+            valor_unitario REAL,
+            subtotal REAL,
+            total REAL,
+            comentarios TEXT
+        )
+    ''')
+    conn.commit()
+    conn.close()
+    print("🧾 INSERT REAL sad→")
+def insert_factura_pdf(num_factura, fecha, nom_cliente, direccion, metodo_pago, cantidad, producto, valor_unitario, subtotal, total, comentarios=""):
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute('''
+        INSERT INTO facturas_completas (num_factura, fecha, nom_cliente, direccion, metodo_pago, cantidad, producto, valor_unitario, subtotal, total, comentarios)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ''', (num_factura, fecha, nom_cliente, direccion, metodo_pago, cantidad, producto, valor_unitario, subtotal, total, comentarios))
+    
+    conn.commit()
+    conn.close()
+    print("🧾 INSERT REAL →", num_factura, producto)
+
 
 def connect_db():
     """Establece conexión con la base de datos."""
@@ -65,6 +104,36 @@ def create_tables():
             envio_incluido INTEGER DEFAULT 0
         )
     ''')
+    # Tablas para pedidos pendientes
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS pending_orders (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            client TEXT,
+            address TEXT,
+            payment_method TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS pending_order_items (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            order_id INTEGER,
+            nombre TEXT,
+            precio REAL,
+            cantidad INTEGER,
+            FOREIGN KEY (order_id) REFERENCES pending_orders(id)
+        )
+    ''')
+    # Tabla para configuración de saldos iniciales
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS config_saldos (
+            id INTEGER PRIMARY KEY CHECK (id = 1),
+            nequi_inicial REAL DEFAULT 0,
+            daviplata_inicial REAL DEFAULT 0
+        )
+    ''')
+    cursor.execute("INSERT OR IGNORE INTO config_saldos (id, nequi_inicial, daviplata_inicial) VALUES (1, 0, 0)")
     conn.commit()
     conn.close()
 
@@ -320,6 +389,64 @@ def delete_factura(factura_id):
     conn.commit()
     conn.close()
 
+# --- FUNCIONES FALTANTES PARA PEDIDOS PENDIENTES Y SALDOS ---
+
+def save_pending_order_db(name, items, client, address, payment_method):
+    conn = connect_db()
+    cursor = conn.cursor()
+    cursor.execute("INSERT INTO pending_orders (name, client, address, payment_method) VALUES (?, ?, ?, ?)", 
+                   (name, client, address, payment_method))
+    order_id = cursor.lastrowid
+    for item in items:
+        # items puede venir como dict o tuple dependiendo del origen, aseguramos manejo
+        nombre = item.get('nombre') if isinstance(item, dict) else item[0]
+        precio = item.get('precio') if isinstance(item, dict) else item[1]
+        cantidad = item.get('cantidad') if isinstance(item, dict) else item[2]
+        
+        cursor.execute("INSERT INTO pending_order_items (order_id, nombre, precio, cantidad) VALUES (?, ?, ?, ?)", 
+                       (order_id, nombre, precio, cantidad))
+    conn.commit()
+    conn.close()
+    return order_id
+
+def get_all_pending_orders():
+    conn = connect_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT id, name, client, address, payment_method, created_at FROM pending_orders ORDER BY created_at DESC")
+    rows = cursor.fetchall()
+    conn.close()
+    return rows
+
+def get_pending_order_items(order_id):
+    conn = connect_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT nombre, precio, cantidad FROM pending_order_items WHERE order_id = ?", (order_id,))
+    rows = cursor.fetchall()
+    conn.close()
+    return rows
+
+def delete_pending_order(order_id):
+    conn = connect_db()
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM pending_order_items WHERE order_id = ?", (order_id,))
+    cursor.execute("DELETE FROM pending_orders WHERE id = ?", (order_id,))
+    conn.commit()
+    conn.close()
+
+def get_saldos_iniciales():
+    conn = connect_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT nequi_inicial, daviplata_inicial FROM config_saldos WHERE id = 1")
+    row = cursor.fetchone()
+    conn.close()
+    return row if row else (0.0, 0.0)
+
+def set_saldos_iniciales(nequi, daviplata):
+    conn = connect_db()
+    cursor = conn.cursor()
+    cursor.execute("UPDATE config_saldos SET nequi_inicial = ?, daviplata_inicial = ? WHERE id = 1", (nequi, daviplata))
+    conn.commit()
+    conn.close()
 
 if __name__ == '__main__':
     create_tables()

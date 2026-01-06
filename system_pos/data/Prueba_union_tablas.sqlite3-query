@@ -1,0 +1,54 @@
+-- database: ./pos_database.db
+
+CREATE TABLE IF NOT EXISTS ventas (
+    id INTEGER PRIMARY KEY,
+    fecha_hora TEXT,
+    total REAL
+);
+
+CREATE TABLE IF NOT EXISTS facturas (
+    id INTEGER PRIMARY KEY,
+    venta_id INTEGER,
+    cliente TEXT,
+    metodo_pago TEXT,
+    direccion_id INTEGER
+);
+
+CREATE TABLE IF NOT EXISTS detalle_venta (
+    id INTEGER PRIMARY KEY,
+    id_venta INTEGER,
+    producto TEXT,
+    cantidad INTEGER,
+    valor_unitario REAL,
+    subtotal REAL
+);
+
+CREATE TABLE IF NOT EXISTS direcciones (
+    id INTEGER PRIMARY KEY,
+    direccion TEXT
+);
+
+CREATE TABLE IF NOT EXISTS observaciones_venta (
+    id INTEGER PRIMARY KEY,
+    id_venta INTEGER,
+    comentarios TEXT
+);
+
+CREATE TABLE IF NOT EXISTS facturas_completas AS
+SELECT
+    f.id                AS num_factura,
+    v.fecha_hora        AS fecha,
+    f.cliente           AS nom_cliente,
+    d.direccion         AS direccion,
+    f.metodo_pago       AS metodo_pago,
+    dv.cantidad         AS cantidad,
+    dv.producto         AS producto,
+    dv.valor_unitario   AS valor_unitario,
+    dv.subtotal         AS subtotal,
+    v.total             AS total,
+    o.comentarios       AS comentarios
+FROM facturas f
+JOIN ventas v ON f.venta_id = v.id
+JOIN detalle_venta dv ON v.id = dv.id_venta
+LEFT JOIN direcciones d ON f.direccion_id = d.id
+LEFT JOIN observaciones_venta o ON v.id = o.id_venta;

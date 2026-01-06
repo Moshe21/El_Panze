@@ -5,8 +5,8 @@ import os
 
 if __name__ == "__main__":
     # Asegurarse de que la carpeta 'data' exista
-    if not os.path.exists('data'):
-        os.makedirs('data')
+    if not os.path.exists('data'): # <--- VERIFICA RUTA DE CARPETA DATA
+        os.makedirs('data') # <--- CREA RUTA DE CARPETA DATA
 
     db_manager.create_tables() # Inicializa la base de datos y tablas
 

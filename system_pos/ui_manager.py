@@ -34,6 +34,14 @@ class POSApp:
         # Control de modo pro
         self.modo_pro_activo = False
 
+        # Cargar saldos iniciales desde la base de datos
+        try:
+            nequi_db, daviplata_db = db_manager.get_saldos_iniciales()
+            self.saldo_nequi_inicio = nequi_db
+            self.saldo_daviplata_inicio = daviplata_db
+        except Exception:
+            pass
+
         # Cargar imagen de fondo
         #self.background_image = None
         #self.bg_label = None
@@ -102,9 +110,9 @@ class POSApp:
         # Establecer fondo de madera extraído del logo (si existe)
         try:
             # Llamar después de crear widgets para que las dimensiones estén disponibles
-            self.set_wood_background(os.path.join('assets', 'logo.png'))
+            self.set_wood_background(os.path.join('assets', 'logo.png')) # <--- RUTA DE IMAGEN DE FONDO
             # Actualizar al cambiar el tamaño de la ventana
-            self.root.bind('<Configure>', lambda e: self.set_wood_background(os.path.join('assets', 'logo.png')))
+            self.root.bind('<Configure>', lambda e: self.set_wood_background(os.path.join('assets', 'logo.png'))) # <--- RUTA DE IMAGEN DE FONDO
         except Exception:
             pass
 
@@ -117,14 +125,14 @@ class POSApp:
         Si la ventana aún no tiene tamaño, usa el tamaño de pantalla.
         """
         try:
-            if not os.path.exists(image_path):
+            if not os.path.exists(image_path): # <--- VERIFICA RUTA DE IMAGEN
                 return
             # Asegurar que dimensiones están disponibles
             self.root.update_idletasks()
             w = max(1, self.root.winfo_width())
             h = max(1, self.root.winfo_height())
 
-            img = Image.open(image_path).convert('RGB')
+            img = Image.open(image_path).convert('RGB') # <--- EJECUTA RUTA (ABRIR IMAGEN)
             # Escalar manteniendo aspecto y luego recortar al tamaño de la ventana
             img = img.resize((w, h), Image.LANCZOS)
             # Aplicar leve desenfoque para que no compita con elementos UI
@@ -150,7 +158,7 @@ class POSApp:
     def load_background_image(self, imagen_fondo):
         
         try:
-            img = Image.open(imagen_fondo)
+            img = Image.open(imagen_fondo) # <--- EJECUTA RUTA (ABRIR IMAGEN)
             img = img.resize((self.root.winfo_screenwidth(), self.root.winfo_screenheight()), Image.LANCZOS)
             self.background_image = ImageTk.PhotoImage(img)
             if self.bg_label is None:
@@ -181,7 +189,13 @@ class POSApp:
                 col = 0
                 row += 1
 
-    def create_widgets(self,products= db_manager.count_products()):
+    def create_widgets(self, products=None):
+        if products is None:
+            try:
+                products = db_manager.count_products()
+            except Exception:
+                products = 0
+
         # Marco principal
         main_frame = ttk.Frame(self.root, padding="10")
         main_frame.pack(fill=tk.BOTH, expand=True)
@@ -271,6 +285,7 @@ class POSApp:
         file_menu.add_separator()
         file_menu.add_command(label="Reimprimir última factura", command=self.show_reprint_modal)
         file_menu.add_separator()
+        file_menu.add_command(label="crear factura empresa", command=self.crear_factura_empresa)
         file_menu.add_command(label="modo pro", command=self.modo_pro)
         file_menu.add_separator()
         file_menu.add_command(label="Salir", command=self.root.quit)
@@ -283,7 +298,7 @@ class POSApp:
         
         try:
             comando = [
-                r"C:\Users\Panze\Documents\GitHub\El_Panze\system_pos\SumatraPDF-3.5.2-64.exe",
+                r"C:\Users\Panze\Documents\GitHub\El_Panze\system_pos\SumatraPDF-3.5.2-64.exe", # <--- RUTA EJECUTABLE SUMATRA PDF
                 "-print-to", impresora,
                 "-silent",
                 ruta_salida
@@ -310,7 +325,7 @@ class POSApp:
             except Exception:
                 pass
             # Ruta al script main.py (misma carpeta que este archivo)
-            main_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "main.py"))
+            main_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "main.py")) # <--- RUTA DEL SCRIPT PRINCIPAL
             # Reemplaza el proceso actual por una nueva instancia de Python ejecutando main.py
             os.execv(sys.executable, [sys.executable, main_path])
 
@@ -337,22 +352,22 @@ class POSApp:
 
             # Intentar cargar imagen desde assets con varios nombres/fallbacks
             img_path_candidates = [
-                f"assets/{product_id}.png",
-                f"assets/{product_id}.jpg",
-                f"assets/{product_id}.jpeg",
-                f"assets/{name}.png",
-                f"assets/{name}.jpg",
-                f"assets/{name}.jpeg",
-                f"assets/{name.replace(' ', '_')}.png",
-                f"assets/{name.replace(' ', '_')}.jpg",
-                f"assets/{name.replace(' ', '_')}.jpeg",
+                f"assets/{product_id}.png", # <--- RUTA CANDIDATA IMAGEN
+                f"assets/{product_id}.jpg", # <--- RUTA CANDIDATA IMAGEN
+                f"assets/{product_id}.jpeg", # <--- RUTA CANDIDATA IMAGEN
+                f"assets/{name}.png", # <--- RUTA CANDIDATA IMAGEN
+                f"assets/{name}.jpg", # <--- RUTA CANDIDATA IMAGEN
+                f"assets/{name.replace(' ', '_')}.jpeg", # <--- RUTA CANDIDATA IMAGEN
+                f"assets/{name.replace(' ', '_')}.png", # <--- RUTA CANDIDATA IMAGEN
+                f"assets/{name.replace(' ', '_')}.jpg", # <--- RUTA CANDIDATA IMAGEN
+                f"assets/{name.replace(' ', '_')}.jpeg", # <--- RUTA CANDIDATA IMAGEN
             ]
 
             photo = None
             for ppath in img_path_candidates:
                 try:
-                    if os.path.exists(ppath):
-                        img = Image.open(ppath)
+                    if os.path.exists(ppath): # <--- VERIFICA RUTA IMAGEN
+                        img = Image.open(ppath) # <--- EJECUTA RUTA (ABRIR IMAGEN)
                         img = img.convert('RGBA')
                         img = img.resize((96, 72), Image.LANCZOS)
                         photo = ImageTk.PhotoImage(img)
@@ -460,25 +475,6 @@ class POSApp:
         ttk.Button(btn_frame, text="Guardar", command=save_with_name).pack(side=tk.LEFT, padx=5)
         ttk.Button(btn_frame, text="Cancelar", command=dialog.destroy).pack(side=tk.RIGHT, padx=5)
 
-    def save_pending(self):
-        payment_method = self.payment_var.get()
-
-        if not payment_method:
-            messagebox.showwarning(
-                "Método de pago",
-                "Selecciona un método de pago antes de guardar."
-            )
-            return
-
-        self.app.save_pending_order(
-            client=self.client,
-            address=self.address,
-            payment_method=payment_method
-        )
-        print("DEBUG pago:", self.payment_var.get())
-
-
-
     def save_pending_order(self, client, address, payment_method):
         if not self.cart:
             messagebox.showwarning("Vacío", "No hay productos para guardar.")
@@ -501,14 +497,19 @@ class POSApp:
                 messagebox.showwarning("Error", "Ingresa un nombre.")
                 return
 
-            self.saved_carts[name] = {
-                "items": dict(self.cart),
-                "client": client,
-                "address": address,
-                "payment_method": payment_method
-            }
+            # Guardar en base de datos
+            import db_manager
+            items = []
+            for k, v in self.cart.items():
+                item = {
+                    'nombre': v.get('nombre', k),
+                    'precio': v.get('precio', 0),
+                    'cantidad': v.get('cantidad', 1)
+                }
+                items.append(item)
+            db_manager.save_pending_order_db(name, items, client, address, payment_method)
 
-            messagebox.showinfo("Guardado", f"Pedido '{name}' guardado.")
+            messagebox.showinfo("Guardado", f"Pedido '{name}' guardado en la base de datos.")
             dialog.destroy()
 
         btns = ttk.Frame(dialog)
@@ -715,22 +716,28 @@ class POSApp:
         DateSelectionModal(self.root, show_statistics_for_date)
 
     def set_initial_balances(self):
-        """Muestra un modal para configurar los saldos iniciales de Nequi y Daviplata."""
+        """Muestra un modal para configurar los saldos iniciales de Nequi y Daviplata y los guarda en la base de datos."""
         dialog = tk.Toplevel(self.root)
         dialog.title("Saldos Iniciales")
         dialog.geometry("320x180")
         dialog.transient(self.root)
         dialog.grab_set()
 
+        # Cargar valores actuales desde la base de datos
+        try:
+            nequi_db, daviplata_db = db_manager.get_saldos_iniciales()
+        except Exception:
+            nequi_db, daviplata_db = self.saldo_nequi_inicio, self.saldo_daviplata_inicio
+
         ttk.Label(dialog, text="Saldo inicial Nequi:").pack(pady=(10, 2), anchor='w', padx=12)
         nequi_entry = ttk.Entry(dialog)
         nequi_entry.pack(fill=tk.X, padx=12)
-        nequi_entry.insert(0, f"{self.saldo_nequi_inicio}")
+        nequi_entry.insert(0, f"{nequi_db}")
 
         ttk.Label(dialog, text="Saldo inicial Daviplata:").pack(pady=(10, 2), anchor='w', padx=12)
         daviplata_entry = ttk.Entry(dialog)
         daviplata_entry.pack(fill=tk.X, padx=12)
-        daviplata_entry.insert(0, f"{self.saldo_daviplata_inicio}")
+        daviplata_entry.insert(0, f"{daviplata_db}")
 
         def save_balances():
             try:
@@ -741,6 +748,10 @@ class POSApp:
                 return
             self.saldo_nequi_inicio = nequi_val
             self.saldo_daviplata_inicio = daviplata_val
+            try:
+                db_manager.set_saldos_iniciales(nequi_val, daviplata_val)
+            except Exception as e:
+                messagebox.showwarning("Advertencia", f"No se pudo guardar en la base de datos: {e}")
             messagebox.showinfo("Saldos guardados", "Saldos iniciales actualizados correctamente.")
             dialog.destroy()
 
@@ -752,12 +763,12 @@ class POSApp:
     def generate_statistics_pdf(self, fecha_str, metodos_pago, suma_total, nequi_inicio=0.0, daviplata_inicio=0.0):
         """Genera un PDF con las estadísticas del día, incluyendo saldos iniciales y finales."""
         try:
-            if not os.path.exists("estadisticas"):
-                os.makedirs("estadisticas")
+            if not os.path.exists("estadisticas"): # <--- VERIFICA RUTA CARPETA ESTADISTICAS
+                os.makedirs("estadisticas") # <--- CREA RUTA CARPETA ESTADISTICAS
             
             # Nombre del archivo con fecha
-            pdf_name = f"estadisticas/estadisticas_{fecha_str}.pdf"
-            c = canvas.Canvas(pdf_name, pagesize=(595, 842))  # A4
+            pdf_name = f"estadisticas/estadisticas_{fecha_str}.pdf" # <--- RUTA ARCHIVO PDF ESTADISTICAS
+            c = canvas.Canvas(pdf_name, pagesize=(595, 842))  # A4 # <--- EJECUTA RUTA (CREAR PDF)
             width, height = 595, 842
             y = height - 40
             
@@ -909,13 +920,13 @@ class POSApp:
         if image_path:
             try:
                 from PIL import Image
-                if not os.path.exists('assets'):
-                    os.makedirs('assets')
-                img = Image.open(image_path)
+                if not os.path.exists('assets'): # <--- VERIFICA RUTA CARPETA ASSETS
+                    os.makedirs('assets') # <--- CREA RUTA CARPETA ASSETS
+                img = Image.open(image_path) # <--- EJECUTA RUTA (ABRIR IMAGEN ORIGEN)
                 img = img.convert('RGBA')
                 img.thumbnail((300, 225), Image.LANCZOS)
-                dest_path = os.path.join('assets', f"{product_id}.png")
-                img.save(dest_path, format='PNG')
+                dest_path = os.path.join('assets', f"{product_id}.png") # <--- RUTA DESTINO IMAGEN
+                img.save(dest_path, format='PNG') # <--- EJECUTA RUTA (GUARDAR IMAGEN)
             except Exception as e:
                 messagebox.showwarning("Imagen", f"No se pudo procesar la imagen: {e}")
 
@@ -948,7 +959,7 @@ class POSApp:
         """Abre un diálogo para seleccionar una imagen y muestra un preview pequeño."""
         from tkinter import filedialog
         try:
-            path = filedialog.askopenfilename(
+            path = filedialog.askopenfilename( # <--- EJECUTA RUTA (SELECCIONAR ARCHIVO)
                 title="Seleccionar imagen del producto",
                 filetypes=[
                     ("Imágenes PNG", "*.png"),
@@ -966,7 +977,7 @@ class POSApp:
 
         self.prod_image_path = path
         try:
-            img = Image.open(path)
+            img = Image.open(path) # <--- EJECUTA RUTA (ABRIR IMAGEN)
             img = img.convert('RGBA')
             img.thumbnail((96, 72), Image.LANCZOS)
             self.prod_image_preview_photo = ImageTk.PhotoImage(img)
@@ -990,7 +1001,113 @@ class POSApp:
             messagebox.showinfo("Éxito", "Producto eliminado correctamente.")
             self._load_products_admin()
 
- 
+    def crear_factura_empresa(self):
+        import tkinter.filedialog
+        factura_path = tkinter.filedialog.askopenfilename(initialdir="facturas", title="Seleccionar factura", filetypes=(('CSV Files', '*.csv'), ('Todos los archivos', '*.*'))) # <--- EJECUTA RUTA (SELECCIONAR FACTURA)
+        if not factura_path:
+            return
+        # Leer datos de la factura seleccionada
+        import csv
+        datos_factura = {}
+        productos = []
+        try:
+            with open(factura_path, newline='', encoding='utf-8') as f: # <--- EJECUTA RUTA (LEER ARCHIVO)
+                reader = csv.DictReader(f)
+                for row in reader:
+                    productos.append(row)
+            if productos:
+                datos_factura = productos[0]
+        except Exception as e:
+            tk.messagebox.showerror("Error", f"No se pudo leer la factura: {e}")
+            return
+
+        # Crear ventana de edición
+        win = tk.Toplevel(self.root)
+        win.title("Crear Factura Empresa")
+        win.geometry("800x600")
+        win.configure(bg=self.PALETTE_BG1)
+
+        # Campos principales (editable)
+        campos = [
+            ("Fecha de venta", datos_factura.get("fecha", "")),
+            ("Dirección", datos_factura.get("direccion", "")),
+            ("Cliente", datos_factura.get("cliente", "")),
+            ("NIT", datos_factura.get("nit", "")),
+            ("num_factura", datos_factura.get("num_factura", "")),
+        ]
+        self.factura_vars = {}
+        for i, (label, valor) in enumerate(campos):
+            tk.Label(win, text=label, bg=self.PALETTE_BG1, font=("Arial", 12, "bold")).grid(row=i, column=0, sticky="w", padx=10, pady=5)
+            var = tk.StringVar(value=valor)
+            tk.Entry(win, textvariable=var, font=("Arial", 12), width=40).grid(row=i, column=1, padx=10, pady=5)
+            self.factura_vars[label] = var
+
+        # Tabla de productos (editable)
+        frame_tabla = tk.LabelFrame(win, text="Productos", bg=self.PALETTE_BG1, font=("Arial", 12, "bold"))
+        frame_tabla.grid(row=len(campos), column=0, columnspan=2, padx=10, pady=10, sticky="ew")
+        cols = ["Cantidad", "Nombre", "Valor unitario", "Valor total"]
+        for j, col in enumerate(cols):
+            tk.Label(frame_tabla, text=col, bg=self.PALETTE_BG1, font=("Arial", 11, "bold")).grid(row=0, column=j, padx=5, pady=5)
+        self.product_entries = []
+        for i, prod in enumerate(productos):
+            row_entries = []
+            for j, campo in zip(range(4), ["cantidad", "nombre", "valor_unitario", "valor_total"]):
+                var = tk.StringVar(value=prod.get(campo, ""))
+                e = tk.Entry(frame_tabla, textvariable=var, font=("Arial", 11), width=15)
+                e.grid(row=i+1, column=j, padx=5, pady=2)
+                row_entries.append(var)
+            self.product_entries.append(row_entries)
+
+        # Botón para guardar/descargar PDF (diseño similar al PDF de ejemplo)
+        def guardar_pdf():
+            from reportlab.lib.pagesizes import letter
+            from reportlab.pdfgen import canvas
+            from reportlab.lib.units import mm
+            import tempfile
+            datos = {k: v.get() for k, v in self.factura_vars.items()}
+            productos_pdf = []
+            for row in self.product_entries:
+                productos_pdf.append({
+                    "cantidad": row[0].get(),
+                    "nombre": row[1].get(),
+                    "valor_unitario": row[2].get(),
+                    "valor_total": row[3].get(),
+                })
+            # Crear PDF temporal
+            pdf_path = tempfile.mktemp(suffix="_factura_empresa.pdf") # <--- RUTA TEMPORAL PDF
+            c = canvas.Canvas(pdf_path, pagesize=letter) # <--- EJECUTA RUTA (CREAR PDF)
+            c.setFont("Helvetica-Bold", 16)
+            c.drawString(50, 750, "FACTURA EMPRESA")
+            c.setFont("Helvetica", 12)
+            c.drawString(50, 730, f"Fecha de venta: {datos.get('Fecha de venta', '')}")
+            c.drawString(50, 710, f"Dirección: {datos.get('Dirección', '')}")
+            c.drawString(50, 690, f"Cliente: {datos.get('Cliente', '')}")
+            c.drawString(50, 670, f"NIT: {datos.get('NIT', '')}")
+            c.drawString(50, 650, f"Número de factura: {datos.get('num_factura', '')}")
+            # Tabla productos
+            c.setFont("Helvetica-Bold", 12)
+            c.drawString(50, 630, "Productos:")
+            c.setFont("Helvetica", 11)
+            y = 610
+            c.drawString(50, y, "Cantidad")
+            c.drawString(120, y, "Nombre")
+            c.drawString(350, y, "Valor unitario")
+            c.drawString(470, y, "Valor total")
+            y -= 20
+            for prod in productos_pdf:
+                c.drawString(50, y, str(prod["cantidad"]))
+                c.drawString(120, y, prod["nombre"])
+                c.drawString(350, y, prod["valor_unitario"])
+                c.drawString(470, y, prod["valor_total"])
+                y -= 20
+                if y < 100:
+                    c.showPage()
+                    y = 750
+            c.save() # <--- EJECUTA RUTA (GUARDAR PDF)
+            tk.messagebox.showinfo("PDF generado", f"Factura PDF guardada en: {pdf_path}")
+
+        tk.Button(win, text="Guardar como PDF", command=guardar_pdf, font=("Arial", 12, "bold"), bg=self.PALETTE_ACCENT, fg="white").grid(row=len(campos)+2, column=0, columnspan=2, pady=20)
+
     def modo_pro(self):
         """Abre un modal para activar/desactivar el modo pro (botones de editar/eliminar en facturas)."""
         dialog = tk.Toplevel(self.root)
@@ -1145,15 +1262,15 @@ class POSApp:
     
         # Crear carpeta de facturas si no existe
         import os
-        if not os.path.exists("facturas"):
-            os.makedirs("facturas")
+        if not os.path.exists("facturas"): # <--- VERIFICA RUTA CARPETA FACTURAS
+            os.makedirs("facturas") # <--- CREA RUTA CARPETA FACTURAS
         
         # Datos generados automáticamente
         fecha = datetime.now().strftime("%d/%m/%Y")
         numero_pedido = str(venta_id).zfill(4)
-        ruta_salida=f"facturas/factura{str(venta_id).zfill(4)}.pdf"
+        ruta_salida=f"facturas/factura{str(venta_id).zfill(4)}.pdf" # <--- RUTA ARCHIVO PDF FACTURA
         # 1 cm = 28,34645672 puntos
-        c = canvas.Canvas(ruta_salida, pagesize=(136, 397))  # Tamaño personalizado en puntos (1 punto = 1/72 pulgadas)
+        c = canvas.Canvas(ruta_salida, pagesize=(136, 397))  # Tamaño personalizado en puntos (1 punto = 1/72 pulgadas) # <--- EJECUTA RUTA (CREAR PDF)
         width=136 #tamaño impresión horizontal 4,8 cm
         height=397 #tamaño impresión vertical 14 cm
     
@@ -1161,7 +1278,7 @@ class POSApp:
 
         # ENCABEZADO
        
-        c.drawImage(Image_path, 0, y - 98, width=120, height=93, preserveAspectRatio=None, mask='auto')
+        c.drawImage(Image_path, 0, y - 98, width=120, height=93, preserveAspectRatio=None, mask='auto') # <--- EJECUTA RUTA (DIBUJAR IMAGEN EN PDF)
         y -= 120
 
         c.setFont("Helvetica-Bold", 10)
@@ -1301,7 +1418,7 @@ class POSApp:
         c.setFont("Helvetica-Bold", 10)
         c.drawString(27, y, "     de siempre.”")
         y -= 10
-        c.save()
+        c.save() # <--- EJECUTA RUTA (GUARDAR PDF)
         print(f"Factura generada: {ruta_salida}")
         
         # Guardar datos de la última factura para reimprimir si es necesario
@@ -1480,13 +1597,10 @@ class PendingOrdersModal(tk.Toplevel):
         self.listbox.delete(0, tk.END)
         self.orders.clear()
 
-        self.app.cursor.execute("""
-            SELECT id, name, client, address, payment_method
-            FROM pending_orders
-            ORDER BY created_at DESC
-        """)
-
-        for row in self.app.cursor.fetchall():
+        # Usar db_manager en lugar de self.app.cursor
+    
+        rows = db_manager.get_all_pending_orders()
+        for row in rows:
             self.orders.append(row)
             self.listbox.insert(tk.END, f"{row[1]} - {row[2]}")
 
@@ -1495,27 +1609,28 @@ class PendingOrdersModal(tk.Toplevel):
         if not sel:
             return
 
-        order_id, name, client, address, payment_method = self.orders[sel[0]]
+        # row: id, name, client, address, payment_method, created_at
+        order_id, name, client, address, payment_method, created_at = self.orders[sel[0]]
 
         # Cargar items
-        self.app.cursor.execute("""
-            SELECT product_name, price, quantity
-            FROM pending_order_items
-            WHERE order_id=?
-        """, (order_id,))
+        import db_manager
+        items = db_manager.get_pending_order_items(order_id)
 
         self.app.cart.clear()
-
-        for name_p, price, qty in self.app.cursor.fetchall():
+        for name_p, price, qty in items:
             self.app.cart[name_p] = {
                 "nombre": name_p,
                 "precio": price,
                 "cantidad": qty
             }
 
+        # Guardar cliente y dirección en el POSApp para que el modal los use
+        self.app.client = client
+        self.app.address = address
+
         self.app.update_cart_display()
 
-        total = self.app.calculate_total()
+        total = self.app.calculate_total() if hasattr(self.app, 'calculate_total') else sum(item['precio'] * item['cantidad'] for item in self.app.cart.values())
 
         PaymentMethodModal(
             self.app.root,
@@ -1537,9 +1652,8 @@ class PendingOrdersModal(tk.Toplevel):
         order_id = self.orders[sel[0]][0]
 
         if messagebox.askyesno("Eliminar", "Eliminar este pedido pendiente?"):
-            self.app.cursor.execute("DELETE FROM pending_order_items WHERE order_id=?", (order_id,))
-            self.app.cursor.execute("DELETE FROM pending_orders WHERE id=?", (order_id,))
-            self.app.conn.commit()
+           
+            db_manager.delete_pending_order(order_id)
             self.load_orders()
 
 class ObservationsModal(tk.Toplevel):
@@ -2130,8 +2244,8 @@ class PaymentMethodModal(tk.Toplevel):
         ttk.Button(button_frame,
             text="💾 Guardar pedido pendiente",
             command=lambda: self.app.save_pending_order(
-                client=self.client,
-                address=self.address,
+                client=self.client if hasattr(self, 'client') and self.client else getattr(self.app, 'client', ''),
+                address=self.address if hasattr(self, 'address') and self.address else getattr(self.app, 'address', ''),
                 payment_method=self.selected_method
             )
         ).pack(fill=tk.X, pady=5)
@@ -2425,7 +2539,7 @@ class ReprintModal(tk.Toplevel):
         for copia in range(copias):
             try:
                 comando = [
-                    r"C:\Users\Panze\Documents\GitHub\El_Panze\system_pos\SumatraPDF-3.5.2-64.exe",
+                    r"C:\Users\Panze\Documents\GitHub\El_Panze\system_pos\SumatraPDF-3.5.2-64.exe", # <--- RUTA EJECUTABLE SUMATRA PDF
                     "-print-to", impresora,
                     "-silent",
                     ruta
