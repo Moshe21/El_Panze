@@ -1221,7 +1221,7 @@ class POSApp:
                 # Modal 3: Capturar observaciones de cada producto
                 def on_observations_saved(observations):
                     try:
-                        venta_id = db_manager.record_sale(total_with_shipping, items, cliente=client, metodo_pago=method_display, observaciones=observations, split_payment=split_data)
+                        venta_id = db_manager.record_sale(total_with_shipping, items, cliente=client, direccion=address, metodo_pago=method_display, observaciones=observations, split_payment=split_data)
 
                         # Recargar productos en UI para ocultar los que quedaron sin stock
                         try:
