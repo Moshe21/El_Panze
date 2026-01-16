@@ -20,7 +20,12 @@ class POSApp:
     def __init__(self, root):
         self.root = root
         self.root.title("El Panze - Sistema POS 4.2")
-        self.root.geometry("1024x768")
+        # Ocupa toda la pantalla
+        self.root.state('zoomed')
+        self.root.update_idletasks()
+        screen_width = self.root.winfo_screenwidth()
+        screen_height = self.root.winfo_screenheight()
+        self.root.geometry(f"{screen_width}x{screen_height}")
 
         self.cart = {}
         self.ultima_factura = None  # Guardar datos de la última factura impresa
@@ -119,7 +124,7 @@ class POSApp:
         # Cargar productos
         self.load_products()
 
-
+    
     def set_wood_background(self, image_path):
         """Carga `image_path`, aplica un filtro sutil y lo usa como fondo escalado.
         Si la ventana aún no tiene tamaño, usa el tamaño de pantalla.
@@ -197,14 +202,16 @@ class POSApp:
                 products = 0
 
         # Marco principal
-        main_frame = ttk.Frame(self.root, padding="10")
+        main_frame = ttk.Frame(self.root, padding="0", borderwidth=10, relief="solid")
         main_frame.pack(fill=tk.BOTH, expand=True)
+        main_frame.grid_rowconfigure(0, weight=1)
+        main_frame.grid_columnconfigure(0, weight=2)
+        main_frame.grid_columnconfigure(1, weight=1)
 
         # Sección de Productos (izquierda)
         if products >= 0:
-            products_frame = ttk.LabelFrame(main_frame, text="Productos", padding="10")
-            products_frame.grid(row=0, column=0, padx=10, pady=10, sticky="nsew")
-            main_frame.grid_columnconfigure(0, weight=2) # Más espacio para productos
+            products_frame = ttk.LabelFrame(main_frame, text="Productos", padding="0", borderwidth=10, relief="solid")
+            products_frame.grid(row=0, column=0, padx=0, pady=0, sticky="nsew")
 
             # Canvas y Scrollbar para productos
             canvas = tk.Canvas(products_frame, bg=self.PALETTE_BG1, highlightthickness=0)
@@ -235,15 +242,29 @@ class POSApp:
             self.product_buttons_frame.bind("<MouseWheel>", _on_mousewheel)
 
         # Sección de Carrito y Total (derecha)
-        cart_frame = ttk.LabelFrame(main_frame, text="Carrito de Compras", padding="10")
-        cart_frame.grid(row=0, column=1, padx=10, pady=10, sticky="nsew")
-        main_frame.grid_columnconfigure(1, weight=1)
+        cart_frame = ttk.LabelFrame(main_frame, text="Carrito de Compras", padding="0", borderwidth=10, relief="solid")
+        cart_frame.grid(row=0, column=1, padx=0, pady=0, sticky="nsew")
 
-        self.cart_listbox = tk.Listbox(cart_frame, height=15, font=('Arial', 12), bg=PALETTE_BG2, fg=PALETTE_DARK, highlightbackground=PALETTE_BG1)
-        self.cart_listbox.pack(fill=tk.BOTH, expand=True, pady=5)
+
+        # Frame para carrito y controles de cantidad
+        cart_listbox_frame = ttk.Frame(cart_frame)
+        cart_listbox_frame.pack(fill=tk.BOTH, expand=True, pady=5)
+
+        self.cart_listbox = tk.Listbox(cart_listbox_frame, height=15, font=('Arial', 12), bg=PALETTE_BG2, fg=PALETTE_DARK, highlightbackground=PALETTE_BG1)
+        self.cart_listbox.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+
+        
 
         ttk.Button(cart_frame, text="Eliminar del Carrito", command=self.remove_from_cart).pack(fill=tk.X, pady=2)
+        # Frame para botones + y -
+        qty_btns_frame = ttk.Frame(cart_listbox_frame)
+        qty_btns_frame.pack(side=tk.LEFT, fill=tk.Y, padx=2)
 
+        self.increase_btn = ttk.Button(qty_btns_frame, text="+", width=3, command=self.increase_cart_item_qty)
+        self.increase_btn.pack(pady=(10,2))
+        self.decrease_btn = ttk.Button(qty_btns_frame, text="-", width=3, command=self.decrease_cart_item_qty)
+        self.decrease_btn.pack(pady=(2,10))
+        # Total
         total_frame = ttk.Frame(cart_frame)
         total_frame.pack(fill=tk.X, pady=10)
         ttk.Label(total_frame, text="Total:").pack(side=tk.LEFT)
@@ -292,6 +313,33 @@ class POSApp:
         file_menu.add_command(label="Salir", command=self.root.quit)
 
         
+    def increase_cart_item_qty(self):
+        """Aumenta la cantidad del producto seleccionado en el carrito."""
+        selected_indices = self.cart_listbox.curselection()
+        if not selected_indices:
+            return
+        index = selected_indices[0]
+        cart_items_list = list(self.cart.keys())
+        if index < len(cart_items_list):
+            product_id = cart_items_list[index]
+            self.cart[product_id]['cantidad'] += 1
+            self.update_cart_display()
+
+    def decrease_cart_item_qty(self):
+        """Disminuye la cantidad del producto seleccionado en el carrito."""
+        selected_indices = self.cart_listbox.curselection()
+        if not selected_indices:
+            return
+        index = selected_indices[0]
+        cart_items_list = list(self.cart.keys())
+        if index < len(cart_items_list):
+            product_id = cart_items_list[index]
+            if self.cart[product_id]['cantidad'] > 1:
+                self.cart[product_id]['cantidad'] -= 1
+            else:
+                # Si la cantidad llega a 0, eliminar el producto
+                del self.cart[product_id]
+            self.update_cart_display()
 
     def _imprimir_factura(self, ruta_salida):
         """Imprime la factura 2 veces."""
@@ -476,7 +524,7 @@ class POSApp:
         ttk.Button(btn_frame, text="Guardar", command=save_with_name).pack(side=tk.LEFT, padx=5)
         ttk.Button(btn_frame, text="Cancelar", command=dialog.destroy).pack(side=tk.RIGHT, padx=5)
 
-    def save_pending_order(self, client, address, payment_method):
+    def save_pending_order(self, client, address):
         if not self.cart:
             messagebox.showwarning("Vacío", "No hay productos para guardar.")
             return
@@ -500,6 +548,7 @@ class POSApp:
 
             # Guardar en base de datos
             import db_manager
+            print(f"[DEBUG] Guardando pedido pendiente: name={name}, client={client}, address={address}, cart={self.cart}")
             items = []
             for k, v in self.cart.items():
                 item = {
@@ -508,7 +557,8 @@ class POSApp:
                     'cantidad': v.get('cantidad', 1)
                 }
                 items.append(item)
-            db_manager.save_pending_order_db(name, items, client, address, payment_method)
+            print(f"[DEBUG] Items a guardar: {items}")
+            db_manager.save_pending_order_db(name, items, client, address)
 
             messagebox.showinfo("Guardado", f"Pedido '{name}' guardado en la base de datos.")
             dialog.destroy()
@@ -518,7 +568,7 @@ class POSApp:
 
         ttk.Button(btns, text="💾 Guardar", command=guardar).pack(side=tk.LEFT, expand=True, fill=tk.X, padx=5)
         ttk.Button(btns, text="Cancelar", command=dialog.destroy).pack(side=tk.RIGHT, expand=True, fill=tk.X, padx=5)
-
+        
 
 
     def show_load_cart_modal(self):
@@ -1221,7 +1271,7 @@ class POSApp:
                 # Modal 3: Capturar observaciones de cada producto
                 def on_observations_saved(observations):
                     try:
-                        venta_id = db_manager.record_sale(total_with_shipping, items, cliente=client, direccion=address, metodo_pago=method_display, observaciones=observations, split_payment=split_data)
+                        num_factura = db_manager.record_sale(total_with_shipping, items, cliente=client, direccion=address, metodo_pago=method_display, observaciones=observations, split_payment=split_data)
 
                         # Recargar productos en UI para ocultar los que quedaron sin stock
                         try:
@@ -1233,23 +1283,23 @@ class POSApp:
                         try:
                             if is_split:
                                 method1, method2, amount1, amount2 = split_data
-                                self.generate_invoice_pdf(venta_id, items, total_with_shipping, cliente=client, dirrecion=address, 
+                                self.generate_invoice_pdf(num_factura, items, total_with_shipping, cliente=client, dirrecion=address, 
                                                         metodo_pago=method_display, cambio=change, observaciones=observations,
                                                         split_payment=(method1, method2, amount1, amount2))
                             else:
-                                self.generate_invoice_pdf(venta_id, items, total_with_shipping, cliente=client, dirrecion=address, 
+                                self.generate_invoice_pdf(num_factura, items, total_with_shipping, cliente=client, dirrecion=address, 
                                                         metodo_pago=method_display, cambio=change, observaciones=observations)
                         except Exception as e:
                             messagebox.showerror("Error en PDF/Impresión", f"La venta se registró pero hubo error al generar/imprimir factura: {e}")
 
-                        messagebox.showinfo("Venta Registrada", f"Venta #{venta_id} completada con éxito.\nDirección: {address}\nMétodo: {payment_info}")
+                        messagebox.showinfo("Venta Registrada", f"Venta #{num_factura} completada con éxito.\nDirección: {address}\nMétodo: {payment_info}")
                         self.clear_cart()
                         
                         # Abrir ventana de facturas para mostrar la nueva factura
-                        try:
-                            FacturasWindow(self.root, app=self)
-                        except Exception as e:
-                            print(f"Error abriendo FacturasWindow: {e}")
+                        #try:
+                        #    FacturasWindow(self.root, app=self)
+                        #except Exception as e:
+                        #    print(f"Error abriendo FacturasWindow: {e}")
                             
                     except Exception as e:
                         messagebox.showerror("Error en la venta", f"No se pudo completar la venta: {e}")
@@ -1285,7 +1335,7 @@ class POSApp:
     
     # ------------------- FACTURA PDF -------------------
 
-    def generate_invoice_pdf(self, venta_id, items, total, cliente="Cliente General", dirrecion="Sin Dirección",
+    def generate_invoice_pdf(self, num_factura, items, total, cliente="Cliente General", dirrecion="Sin Dirección",
                          metodo_pago="Efectivo", cambio=0, observaciones=None, ruta_salida="factura.pdf",Image_path="assets/logo_impresora.jpg", split_payment=None):
     
         # Crear carpeta de facturas si no existe
@@ -1295,8 +1345,8 @@ class POSApp:
         
         # Datos generados automáticamente
         fecha = datetime.now().strftime("%d/%m/%Y")
-        numero_pedido = str(venta_id).zfill(4)
-        ruta_salida=f"facturas/factura{str(venta_id).zfill(4)}.pdf" # <--- RUTA ARCHIVO PDF FACTURA
+        numero_pedido = num_factura
+        ruta_salida=f"facturas/factura{num_factura}.pdf" # <--- RUTA ARCHIVO PDF FACTURA
         # 1 cm = 28,34645672 puntos
         c = canvas.Canvas(ruta_salida, pagesize=(136, 397))  # Tamaño personalizado en puntos (1 punto = 1/72 pulgadas) # <--- EJECUTA RUTA (CREAR PDF)
         width=136 #tamaño impresión horizontal 4,8 cm
@@ -1451,7 +1501,7 @@ class POSApp:
         
         # Guardar datos de la última factura para reimprimir si es necesario
         self.ultima_factura = {
-            'venta_id': venta_id,
+            'num_factura': num_factura,
             'ruta': ruta_salida,
             'items': items,
             'total': total,
@@ -1474,44 +1524,7 @@ class POSApp:
             except Exception as e:
                 messagebox.showwarning("Impresión", f"No se pudo imprimir la copia: {e}")
 
-    def save_pending_order(self, client, address, payment_method):
-        if not self.cart:
-            messagebox.showwarning("Vacío", "No hay productos para guardar.")
-            return
-
-        dialog = tk.Toplevel(self.root)
-        dialog.title("Guardar Pedido Pendiente")
-        dialog.geometry("400x170")
-        dialog.transient(self.root)
-        dialog.grab_set()
-
-        ttk.Label(dialog, text="Nombre del pedido:", font=('Arial', 11, 'bold')).pack(pady=10)
-        entry = ttk.Entry(dialog)
-        entry.pack(fill=tk.X, padx=20)
-        entry.focus()
-
-        def guardar():
-            name = entry.get().strip()
-            if not name:
-                messagebox.showwarning("Error", "Ingresa un nombre.")
-                return
-
-            self.saved_carts[name] = {
-                "items": dict(self.cart),
-                "client": client,
-                "address": address,
-                "payment_method": payment_method
-            }
-
-            messagebox.showinfo("Guardado", f"Pedido '{name}' guardado.")
-            dialog.destroy()
-
-        btns = ttk.Frame(dialog)
-        btns.pack(fill=tk.X, pady=15, padx=20)
-
-        ttk.Button(btns, text="💾 Guardar", command=guardar).pack(side=tk.LEFT, expand=True, fill=tk.X, padx=5)
-        ttk.Button(btns, text="Cancelar", command=dialog.destroy).pack(side=tk.RIGHT, expand=True, fill=tk.X, padx=5)
-
+    
 #ttk.Radiobutton(copias_frame, text="1 copia", variable=self.copias_var, value=1).pack(side=tk.LEFT, padx=10)
         #ttk.Radiobutton(copias_frame, text="2 copias", variable=self.copias_var, value=2).pack(side=tk.LEFT, padx=10)
         
@@ -1637,37 +1650,37 @@ class PendingOrdersModal(tk.Toplevel):
         if not sel:
             return
 
-        # row: id, name, client, address, payment_method, created_at
-        order_id, name, client, address, payment_method, created_at = self.orders[sel[0]]
+        # Obtener el nombre del carrito seleccionado
+        cart_name = list(self.saved_carts.keys())[sel[0]]
+        cart_data = self.saved_carts[cart_name]
 
-        # Cargar items
-        import db_manager
-        items = db_manager.get_pending_order_items(order_id)
+        # Actualizar variables temporales en la app
+        self.app.current_pending_order = {
+            "name": cart_data.get("name", cart_name),
+            "items": cart_data.get("items", {}),
+            "client": cart_data.get("client", ""),
+            "address": cart_data.get("address", "")
+        }
 
+        # Actualizar el carrito y datos en la app
         self.app.cart.clear()
-        for name_p, price, qty in items:
-            self.app.cart[name_p] = {
-                "nombre": name_p,
-                "precio": price,
-                "cantidad": qty
-            }
-
-        # Guardar cliente y dirección en el POSApp para que el modal los use
-        self.app.client = client
-        self.app.address = address
+        for k, v in cart_data.get("items", {}).items():
+            self.app.cart[k] = v
+        self.app.client = cart_data.get("client", "")
+        self.app.address = cart_data.get("address", "")
 
         self.app.update_cart_display()
 
         total = self.app.calculate_total() if hasattr(self.app, 'calculate_total') else sum(item['precio'] * item['cantidad'] for item in self.app.cart.values())
 
+        # Abrir el modal de método de pago
         PaymentMethodModal(
             self.app.root,
             total,
-            callback=lambda m: None,
+            callback=lambda m, *args, **kwargs: None,
             app=self.app,
-            client=client,
-            address=address,
-            payment_method=payment_method
+            client=self.app.client,
+            address=self.app.address
         )
 
         self.destroy()
@@ -1745,15 +1758,23 @@ class ObservationsModal(tk.Toplevel):
         
         ttk.Button(button_frame, text="✓ Guardar y Continuar", command=self.save_observations).pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
         ttk.Button(button_frame, text="✕ Cancelar", command=self.destroy).pack(side=tk.RIGHT, padx=5, fill=tk.X, expand=True)
+        # Botón Volver
+        ttk.Button(button_frame, text="⬅ Volver", command=self.on_back).pack(side=tk.BOTTOM, fill=tk.X, pady=5)
+
+    def on_back(self):
+        self.destroy()
+        # Volver al modal anterior (método de pago)
+        # Se asume que process_sale vuelve a llamar PaymentMethodModal
+        if hasattr(self.master, 'process_sale'):
+            self.master.process_sale()
     
     def save_observations(self):
         """Guarda todas las observaciones y cierra el modal."""
         observations = {}
         for product_name, text_widget in self.observations_entries.items():
             observations[product_name] = text_widget.get("1.0", tk.END).strip()
-        
+        self.destroy()  # Cerrar el modal inmediatamente al oprimir el botón
         self.callback(observations)
-        self.destroy()
 
 
 class FacturasWindow(tk.Toplevel):
@@ -2270,13 +2291,23 @@ class PaymentMethodModal(tk.Toplevel):
         ttk.Button(button_frame, text="🔀 PAGO DIVIDIDO", command=self.select_split_payment).pack(fill=tk.X, pady=5)
         
         ttk.Button(button_frame,
-            text="💾 Guardar pedido pendiente",
-            command=lambda: self.app.save_pending_order(
-                client=self.client if hasattr(self, 'client') and self.client else getattr(self.app, 'client', ''),
-                address=self.address if hasattr(self, 'address') and self.address else getattr(self.app, 'address', ''),
-                payment_method=self.selected_method
-            )
-        ).pack(fill=tk.X, pady=5)
+                        text="💾 Guardar pedido pendiente",
+                        command=lambda: self.app.save_pending_order(
+                            client=self.client if hasattr(self, 'client') and self.client else getattr(self.app, 'client', ''),
+                            address=self.address if hasattr(self, 'address') and self.address else getattr(self.app, 'address', ''),
+                            payment_method=getattr(self, 'selected_method', None)  # Asegúrate de pasar el método de pago si lo tienes
+                        )
+                    ).pack(fill=tk.X, pady=5)
+
+        # Botón Volver
+        ttk.Button(button_frame, text="⬅ Volver", command=self.on_back).pack(fill=tk.X, pady=5)
+
+    def on_back(self):
+        self.destroy()
+        # Volver al modal anterior (dirección)
+        # Se asume que process_sale vuelve a llamar AddressModal
+        if hasattr(self.app, 'process_sale'):
+            self.app.process_sale()
 
 
     def select_payment(self, method):
@@ -2468,6 +2499,14 @@ class CashPaymentModal(tk.Toplevel):
         
         ttk.Button(button_frame, text="Confirmar Pago", command=self.confirm_payment).pack(side=tk.LEFT, padx=5)
         ttk.Button(button_frame, text="Cancelar", command=self.destroy).pack(side=tk.RIGHT, padx=5)
+        # Botón Volver
+        ttk.Button(button_frame, text="⬅ Volver", command=self.on_back).pack(side=tk.BOTTOM, fill=tk.X, pady=5)
+
+    def on_back(self):
+        self.destroy()
+        # Volver al modal anterior (método de pago)
+        if hasattr(self.master, 'process_sale'):
+            self.master.process_sale()
     
     def calculate_change(self, event=None):
         try:
@@ -2530,7 +2569,7 @@ class ReprintModal(tk.Toplevel):
         info_frame = ttk.LabelFrame(main_frame, text="Datos de la Factura", padding="10")
         info_frame.pack(fill=tk.BOTH, expand=True, pady=10)
         
-        ttk.Label(info_frame, text=f"Número de Venta: #{str(self.ultima_factura['venta_id']).zfill(4)}", 
+        ttk.Label(info_frame, text=f"Número de Venta: #{self.ultima_factura['num_factura']}", 
                   font=('Arial', 11, 'bold')).pack(anchor='w', pady=5)
         ttk.Label(info_frame, text=f"Cliente: {self.ultima_factura['cliente']}", 
                   font=('Arial', 10)).pack(anchor='w', pady=2)

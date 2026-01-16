@@ -94,7 +94,6 @@ def create_tables():
             comentarios TEXT
         )
     ''')
-   
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS facturas (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -103,15 +102,6 @@ def create_tables():
             cliente TEXT,
             metodo_pago TEXT,
             valor_total REAL NOT NULL
-        )
-    ''')
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS observaciones_venta (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            num_factura TEXT NOT NULL,
-            producto_nombre TEXT NOT NULL,
-            observacion TEXT,
-            FOREIGN KEY (num_factura) REFERENCES facturas_completas(num_factura)
         )
     ''')
     # Tabla de direcciones/ciudades
@@ -129,7 +119,6 @@ def create_tables():
             name TEXT NOT NULL,
             client TEXT,
             address TEXT,
-            payment_method TEXT,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     ''')
@@ -298,6 +287,7 @@ def record_sale(total, items_vendidos, cliente="", direccion="", metodo_pago="",
 
     # Insertar en facturas_completas
     for item in items_vendidos:
+        producto_id = item['id']
         producto_nombre = item['nombre']
         cantidad = item['cantidad']
         precio_unitario = item['precio']
@@ -307,13 +297,6 @@ def record_sale(total, items_vendidos, cliente="", direccion="", metodo_pago="",
             INSERT INTO facturas_completas (num_factura, fecha, nom_cliente, direccion, metodo_pago, cantidad, producto, valor_unitario, subtotal, total, comentarios)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', (num_factura, fecha_hora, cliente, direccion, metodo_pago_guardado, cantidad, producto_nombre, precio_unitario, subtotal, total, comentario))
-
-    for item in items_vendidos:
-        producto_id = item['id']
-        cantidad = item['cantidad']
-        precio_unitario = item['precio']
-        cursor.execute("INSERT INTO detalle_venta (num_factura, producto_id, cantidad, precio_unitario) VALUES (?, ?, ?, ?)",
-                       (num_factura, producto_id, cantidad, precio_unitario))
         # Actualizar stock: restar la cantidad vendida a TODOS los productos
         # que pertenezcan a la misma categoría que el producto vendido.
         cursor.execute("SELECT categoria FROM productos WHERE id = ?", (producto_id,))
@@ -329,16 +312,9 @@ def record_sale(total, items_vendidos, cliente="", direccion="", metodo_pago="",
             # Si no se encuentra categoría, decrementamos únicamente el producto vendido
             cursor.execute("UPDATE productos SET stock = CASE WHEN stock - ? < 0 THEN 0 ELSE stock - ? END WHERE id = ?", (cantidad, cantidad, producto_id))
     
-    # Guardar observaciones si existen
-    if observaciones:
-        for producto_nombre, obs in observaciones.items():
-            if obs.strip():  # Solo guardar si hay observación
-                cursor.execute("INSERT INTO observaciones_venta (num_factura, producto_nombre, observacion) VALUES (?, ?, ?)",
-                               (num_factura, producto_nombre, obs.strip()))
-
     conn.commit()
     conn.close()
-    return venta_id
+    return num_factura
 
 def count_products():
     """Cuenta el número total de productos en la base de datos."""
@@ -355,9 +331,9 @@ def get_all_facturas():
     cursor = conn.cursor()
     cursor.execute("""
         SELECT f.id, f.num_factura, f.fecha_hora, f.cliente, f.metodo_pago, f.valor_total,
-               GROUP_CONCAT(ov.observacion, ' | ') as observaciones
+               GROUP_CONCAT(CASE WHEN fc.comentarios IS NOT NULL AND fc.comentarios != '' THEN fc.comentarios ELSE NULL END, ' | ') as observaciones
         FROM facturas f
-        LEFT JOIN observaciones_venta ov ON f.num_factura = ov.num_factura
+        LEFT JOIN facturas_completas fc ON f.num_factura = fc.num_factura
         GROUP BY f.id
         ORDER BY f.id DESC
     """)
@@ -372,9 +348,9 @@ def get_factura_by_id(factura_id):
     cursor = conn.cursor()
     cursor.execute("""
         SELECT f.id, f.num_factura, f.fecha_hora, f.cliente, f.metodo_pago, f.valor_total,
-               GROUP_CONCAT(ov.observacion, ' | ') as observaciones
+               GROUP_CONCAT(CASE WHEN fc.comentarios IS NOT NULL AND fc.comentarios != '' THEN fc.comentarios ELSE NULL END, ' | ') as observaciones
         FROM facturas f
-        LEFT JOIN observaciones_venta ov ON f.num_factura = ov.num_factura
+        LEFT JOIN facturas_completas fc ON f.num_factura = fc.num_factura
         WHERE f.id = ?
         GROUP BY f.id
     """, (factura_id,))
@@ -421,11 +397,11 @@ def delete_factura(factura_id):
 
 # --- FUNCIONES FALTANTES PARA PEDIDOS PENDIENTES Y SALDOS ---
 
-def save_pending_order_db(name, items, client, address, payment_method):
+def save_pending_order_db(name, items, client, address):
     conn = connect_db()
-    cursor = conn.cursor()
-    cursor.execute("INSERT INTO pending_orders (name, client, address, payment_method) VALUES (?, ?, ?, ?)", 
-                   (name, client, address, payment_method))
+    cursor = conn.cursor()  
+    cursor.execute("INSERT INTO pending_orders (name, client, address) VALUES (?, ?, ?)", 
+                   (name, client, address))
     order_id = cursor.lastrowid
     for item in items:
         # items puede venir como dict o tuple dependiendo del origen, aseguramos manejo
@@ -442,7 +418,7 @@ def save_pending_order_db(name, items, client, address, payment_method):
 def get_all_pending_orders():
     conn = connect_db()
     cursor = conn.cursor()
-    cursor.execute("SELECT id, name, client, address, payment_method, created_at FROM pending_orders ORDER BY created_at DESC")
+    cursor.execute("SELECT id, name, client, address, created_at FROM pending_orders ORDER BY created_at DESC")
     rows = cursor.fetchall()
     conn.close()
     return rows
