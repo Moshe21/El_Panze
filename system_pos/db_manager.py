@@ -137,10 +137,16 @@ def create_tables():
         CREATE TABLE IF NOT EXISTS config_saldos (
             id INTEGER PRIMARY KEY CHECK (id = 1),
             nequi_inicial REAL DEFAULT 0,
-            daviplata_inicial REAL DEFAULT 0
+            daviplata_inicial REAL DEFAULT 0,
+            efectivo_inicial REAL DEFAULT 0
         )
     ''')
-    cursor.execute("INSERT OR IGNORE INTO config_saldos (id, nequi_inicial, daviplata_inicial) VALUES (1, 0, 0)")
+    # Si la columna efectivo_inicial no existe, agregarla (migración)
+    try:
+        cursor.execute("ALTER TABLE config_saldos ADD COLUMN efectivo_inicial REAL DEFAULT 0")
+    except Exception:
+        pass
+    cursor.execute("INSERT OR IGNORE INTO config_saldos (id, nequi_inicial, daviplata_inicial, efectivo_inicial) VALUES (1, 0, 0, 0)")
     conn.commit()
     conn.close()
 
@@ -442,15 +448,22 @@ def delete_pending_order(order_id):
 def get_saldos_iniciales():
     conn = connect_db()
     cursor = conn.cursor()
-    cursor.execute("SELECT nequi_inicial, daviplata_inicial FROM config_saldos WHERE id = 1")
+    cursor.execute("SELECT nequi_inicial, daviplata_inicial, efectivo_inicial FROM config_saldos WHERE id = 1")
     row = cursor.fetchone()
     conn.close()
-    return row if row else (0.0, 0.0)
+    return row if row else (0.0, 0.0, 0.0)
 
-def set_saldos_iniciales(nequi, daviplata):
+def set_saldos_iniciales(nequi, daviplata=None, efectivo=None):
     conn = connect_db()
     cursor = conn.cursor()
-    cursor.execute("UPDATE config_saldos SET nequi_inicial = ?, daviplata_inicial = ? WHERE id = 1", (nequi, daviplata))
+    # Permitir llamada con una tupla/lista o con tres argumentos
+    if daviplata is None and efectivo is None and isinstance(nequi, (tuple, list)) and len(nequi) == 3:
+        nequi_val, daviplata_val, efectivo_val = nequi
+    else:
+        nequi_val = nequi
+        daviplata_val = daviplata if daviplata is not None else 0.0
+        efectivo_val = efectivo if efectivo is not None else 0.0
+    cursor.execute("UPDATE config_saldos SET nequi_inicial = ?, daviplata_inicial = ?, efectivo_inicial = ? WHERE id = 1", (nequi_val, daviplata_val, efectivo_val))
     conn.commit()
     conn.close()
 

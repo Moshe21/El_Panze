@@ -649,6 +649,7 @@ class POSApp:
                 self.destroy()
 
         # Callback que calcula y muestra estadísticas para la fecha dada
+
         def show_statistics_for_date(fecha_str):
             from datetime import datetime
             facturas = db_manager.get_all_facturas()
@@ -660,38 +661,31 @@ class POSApp:
             metodos_pago = {}
             for factura in facturas_filtradas:
                 fact_id, num_factura, fecha_hora, cliente, metodo_pago, valor_total, observaciones = factura
-                
                 # Detectar si es pago dividido (formato: METHOD1|AMOUNT1+METHOD2|AMOUNT2)
                 if metodo_pago and '|' in metodo_pago and '+' in metodo_pago:
-                    # Pago dividido
                     try:
                         partes = metodo_pago.split('+')
                         m1_info = partes[0].split('|')
                         m2_info = partes[1].split('|')
                         metodo1, monto1 = m1_info[0], float(m1_info[1])
                         metodo2, monto2 = m2_info[0], float(m2_info[1])
-                        
-                        # Registrar ambos métodos con sus montos
                         if metodo1 not in metodos_pago:
                             metodos_pago[metodo1] = {'total': 0, 'cantidad': 0, 'facturas': []}
                         metodos_pago[metodo1]['total'] += monto1
                         metodos_pago[metodo1]['cantidad'] += 1
                         metodos_pago[metodo1]['facturas'].append(factura)
-                        
                         if metodo2 not in metodos_pago:
                             metodos_pago[metodo2] = {'total': 0, 'cantidad': 0, 'facturas': []}
                         metodos_pago[metodo2]['total'] += monto2
                         metodos_pago[metodo2]['cantidad'] += 1
                         metodos_pago[metodo2]['facturas'].append(factura)
                     except Exception:
-                        # Si hay error parseando, tratarlo como método simple
                         if metodo_pago not in metodos_pago:
                             metodos_pago[metodo_pago] = {'total': 0, 'cantidad': 0, 'facturas': []}
                         metodos_pago[metodo_pago]['total'] += valor_total
                         metodos_pago[metodo_pago]['cantidad'] += 1
                         metodos_pago[metodo_pago]['facturas'].append(factura)
                 else:
-                    # Pago simple
                     if metodo_pago not in metodos_pago:
                         metodos_pago[metodo_pago] = {'total': 0, 'cantidad': 0, 'facturas': []}
                     metodos_pago[metodo_pago]['total'] += valor_total
@@ -713,15 +707,13 @@ class POSApp:
             mensaje += "=" * 50 + "\n"
             mensaje += f"TOTAL GENERAL: ${suma_total:,.0f}"
 
-            # Cálculo de totales específicos para Nequi y Daviplata (insensible a mayúsculas)
-            # Incluye montos de pagos divididos
+            # Cálculo de totales específicos para Nequi, Daviplata y Efectivo (insensible a mayúsculas)
             total_nequi = 0
             total_daviplata = 0
+            total_efectivo = 0
             for factura in facturas_filtradas:
                 metodo_pago = factura[4] or ''
                 valor = factura[5]
-                
-                # Detectar pago dividido
                 if '|' in metodo_pago and '+' in metodo_pago:
                     try:
                         partes = metodo_pago.split('+')
@@ -729,7 +721,6 @@ class POSApp:
                         m2_info = partes[1].split('|')
                         metodo1, monto1 = m1_info[0].strip(), float(m1_info[1])
                         metodo2, monto2 = m2_info[0].strip(), float(m2_info[1])
-                        
                         if metodo1.lower() == 'nequi':
                             total_nequi += monto1
                         if metodo2.lower() == 'nequi':
@@ -738,28 +729,46 @@ class POSApp:
                             total_daviplata += monto1
                         if metodo2.lower() == 'daviplata':
                             total_daviplata += monto2
+                        if metodo1.lower() == 'efectivo':
+                            total_efectivo += monto1
+                        if metodo2.lower() == 'efectivo':
+                            total_efectivo += monto2
                     except Exception:
                         if metodo_pago.strip().lower() == 'nequi':
                             total_nequi += valor
                         elif metodo_pago.strip().lower() == 'daviplata':
                             total_daviplata += valor
+                        elif metodo_pago.strip().lower() == 'efectivo':
+                            total_efectivo += valor
                 else:
-                    # Pago simple
                     if metodo_pago.strip().lower() == 'nequi':
                         total_nequi += valor
                     elif metodo_pago.strip().lower() == 'daviplata':
                         total_daviplata += valor
-            final_nequi = self.saldo_nequi_inicio + total_nequi
-            final_daviplata = self.saldo_daviplata_inicio + total_daviplata
+                    elif metodo_pago.strip().lower() == 'efectivo':
+                        total_efectivo += valor
+
+            # Obtener saldos iniciales de efectivo
+            saldo_nequi_inicio = getattr(self, 'saldo_nequi_inicio', 0.0)
+            saldo_daviplata_inicio = getattr(self, 'saldo_daviplata_inicio', 0.0)
+            saldo_efectivo_inicio = getattr(self, 'saldo_efectivo_inicio', 0.0)
+            final_nequi = saldo_nequi_inicio + total_nequi
+            final_daviplata = saldo_daviplata_inicio + total_daviplata
+            final_efectivo = saldo_efectivo_inicio + total_efectivo
             mensaje += "\n\nSaldos (inicio / ventas del día / final):\n"
-            mensaje += f"Nequi: ${self.saldo_nequi_inicio:,.0f} / ${total_nequi:,.0f} / ${final_nequi:,.0f}\n"
-            mensaje += f"Daviplata: ${self.saldo_daviplata_inicio:,.0f} / ${total_daviplata:,.0f} / ${final_daviplata:,.0f}\n"
+            mensaje += f"Nequi: ${saldo_nequi_inicio:,.0f} / ${total_nequi:,.0f} / ${final_nequi:,.0f}\n"
+            mensaje += f"Daviplata: ${saldo_daviplata_inicio:,.0f} / ${total_daviplata:,.0f} / ${final_daviplata:,.0f}\n"
+            mensaje += f"Efectivo: ${saldo_efectivo_inicio:,.0f} / ${total_efectivo:,.0f} / ${final_efectivo:,.0f}\n"
 
             messagebox.showinfo("Estadísticas", mensaje)
 
             # Generar PDF de estadísticas (incluyendo saldos iniciales)
-            self.generate_statistics_pdf(fecha_str, metodos_pago, suma_total, self.saldo_nequi_inicio, self.saldo_daviplata_inicio)
-
+            """    
+                self.generate_statistics_pdf(
+                fecha_str, metodos_pago, suma_total,
+                saldo_nequi_inicio, saldo_daviplata_inicio, saldo_efectivo_inicio
+            )
+            """
             # Mostrar ventana detallada
             DailyStatisticsWindow(self.root, metodos_pago, fecha_str)
 
@@ -775,10 +784,11 @@ class POSApp:
         dialog.grab_set()
 
         # Cargar valores actuales desde la base de datos
+
         try:
-            nequi_db, daviplata_db = db_manager.get_saldos_iniciales()
+            nequi_db, daviplata_db, efectivo_db = db_manager.get_saldos_iniciales()
         except Exception:
-            nequi_db, daviplata_db = self.saldo_nequi_inicio, self.saldo_daviplata_inicio
+            nequi_db, daviplata_db, efectivo_db = getattr(self, 'saldo_nequi_inicio', 0.0), getattr(self, 'saldo_daviplata_inicio', 0.0), getattr(self, 'saldo_efectivo_inicio', 0.0)
 
         ttk.Label(dialog, text="Saldo inicial Nequi:").pack(pady=(10, 2), anchor='w', padx=12)
         nequi_entry = ttk.Entry(dialog)
@@ -790,17 +800,24 @@ class POSApp:
         daviplata_entry.pack(fill=tk.X, padx=12)
         daviplata_entry.insert(0, f"{daviplata_db}")
 
+        ttk.Label(dialog, text="Saldo inicial Efectivo:").pack(pady=(10, 2), anchor='w', padx=12)
+        efectivo_entry = ttk.Entry(dialog)
+        efectivo_entry.pack(fill=tk.X, padx=12)
+        efectivo_entry.insert(0, f"{efectivo_db}")
+
         def save_balances():
             try:
                 nequi_val = float(nequi_entry.get() or 0)
                 daviplata_val = float(daviplata_entry.get() or 0)
+                efectivo_val = float(efectivo_entry.get() or 0)
             except ValueError:
                 messagebox.showerror("Error", "Introduce valores numéricos válidos.")
                 return
             self.saldo_nequi_inicio = nequi_val
             self.saldo_daviplata_inicio = daviplata_val
+            self.saldo_efectivo_inicio = efectivo_val
             try:
-                db_manager.set_saldos_iniciales(nequi_val, daviplata_val)
+                db_manager.set_saldos_iniciales((nequi_val, daviplata_val, efectivo_val))
             except Exception as e:
                 messagebox.showwarning("Advertencia", f"No se pudo guardar en la base de datos: {e}")
             messagebox.showinfo("Saldos guardados", "Saldos iniciales actualizados correctamente.")
@@ -814,39 +831,33 @@ class POSApp:
     def generate_statistics_pdf(self, fecha_str, metodos_pago, suma_total, nequi_inicio=0.0, daviplata_inicio=0.0):
         """Genera un PDF con las estadísticas del día, incluyendo saldos iniciales y finales."""
         try:
-            if not os.path.exists("estadisticas"): # <--- VERIFICA RUTA CARPETA ESTADISTICAS
-                os.makedirs("estadisticas") # <--- CREA RUTA CARPETA ESTADISTICAS
-            
-            # Nombre del archivo con fecha
-            pdf_name = f"estadisticas/estadisticas_{fecha_str}.pdf" # <--- RUTA ARCHIVO PDF ESTADISTICAS
-            c = canvas.Canvas(pdf_name, pagesize=(595, 842))  # A4 # <--- EJECUTA RUTA (CREAR PDF)
+            if not os.path.exists("estadisticas"):
+                os.makedirs("estadisticas")
+            pdf_name = f"estadisticas/estadisticas_{fecha_str}.pdf"
+            c = canvas.Canvas(pdf_name, pagesize=(595, 842))
             width, height = 595, 842
             y = height - 40
-            
-            # Encabezado
+
             c.setFont("Helvetica-Bold", 18)
             c.drawString(50, y, "ESTADÍSTICAS DE VENTAS")
             y -= 30
-            
+
             c.setFont("Helvetica-Bold", 12)
             c.drawString(50, y, f"Fecha: {fecha_str}")
             y -= 30
-            
-            # Línea separadora
+
             c.line(50, y, 545, y)
             y -= 20
-            
-            # Datos por método de pago
+
             c.setFont("Helvetica-Bold", 11)
             c.drawString(50, y, "Resumen por Método de Pago:")
             y -= 20
-            
+
             c.setFont("Helvetica", 10)
             for metodo in sorted(metodos_pago.keys()):
                 datos = metodos_pago[metodo]
                 total = datos['total']
                 cantidad = datos['cantidad']
-                
                 c.drawString(70, y, f"• {metodo}:")
                 y -= 15
                 c.drawString(90, y, f"Cantidad de ventas: {cantidad}")
@@ -854,34 +865,47 @@ class POSApp:
                 c.drawString(90, y, f"Total: ${total:,.0f}")
                 y -= 18
 
-            # Línea separadora
             c.line(50, y, 545, y)
             y -= 20
 
-            # Totales y saldos específicos para Nequi/Daviplata (insensible a mayúsculas)
+            # Totales y saldos específicos para Nequi/Daviplata/Efectivo
             total_nequi = sum(v.get('total', 0) for k, v in metodos_pago.items() if (k or '').strip().lower() == 'nequi')
             total_daviplata = sum(v.get('total', 0) for k, v in metodos_pago.items() if (k or '').strip().lower() == 'daviplata')
+            total_efectivo = sum(v.get('total', 0) for k, v in metodos_pago.items() if (k or '').strip().lower() == 'efectivo')
+            # Permitir que se pase saldo_efectivo_inicio como argumento opcional
+            saldo_efectivo_inicio = 0.0
+            import inspect
+            args = inspect.getfullargspec(self.generate_statistics_pdf).args
+            if 'saldo_efectivo_inicio' in args:
+                try:
+                    saldo_efectivo_inicio = locals().get('saldo_efectivo_inicio', 0.0)
+                except Exception:
+                    saldo_efectivo_inicio = 0.0
+            else:
+                saldo_efectivo_inicio = getattr(self, 'saldo_efectivo_inicio', 0.0)
             final_nequi = nequi_inicio + total_nequi
             final_daviplata = daviplata_inicio + total_daviplata
+            final_efectivo = saldo_efectivo_inicio + total_efectivo
 
             c.setFont("Helvetica-Bold", 12)
             c.drawString(50, y, f"TOTAL GENERAL: ${suma_total:,.0f}")
             y -= 20
 
             c.setFont("Helvetica-Bold", 11)
-            c.drawString(50, y, "Saldos Nequi / Daviplata:")
+            c.drawString(50, y, "Saldos Nequi / Daviplata / Efectivo:")
             y -= 16
             c.setFont("Helvetica", 10)
             c.drawString(70, y, f"Nequi - Inicio: ${nequi_inicio:,.0f}  Ventas: ${total_nequi:,.0f}  Final: ${final_nequi:,.0f}")
             y -= 14
             c.drawString(70, y, f"Daviplata - Inicio: ${daviplata_inicio:,.0f}  Ventas: ${total_daviplata:,.0f}  Final: ${final_daviplata:,.0f}")
+            y -= 14
+            c.drawString(70, y, f"Efectivo - Inicio: ${saldo_efectivo_inicio:,.0f}  Ventas: ${total_efectivo:,.0f}  Final: ${final_efectivo:,.0f}")
             y -= 20
 
-            # Información adicional
             c.setFont("Helvetica", 9)
             c.drawString(50, y, f"Generado: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}")
             c.drawString(50, y - 15, "El Panze - Sistema POS")
-            
+
             c.save()
             messagebox.showinfo("PDF Generado", f"Estadísticas guardadas en:\n{pdf_name}")
         except Exception as e:
@@ -1518,7 +1542,9 @@ class POSApp:
         #    messagebox.showwarning("Impresión", f"No se pudo imprimir la factura: {e}")
 
         # Preguntar si desea una copia adicional
-        if messagebox.askyesno("Imprimir copia", "¿Deseas imprimir una copia adicional de la factura?"):
+        if messagebox.askyesno("sin factura", "seleciona no,'Si deseas imprimir la factura"):
+             print("sin factura")
+        else:    
             try:
                 self._imprimir_factura(ruta_salida)
             except Exception as e:
@@ -1529,7 +1555,6 @@ class POSApp:
         #ttk.Radiobutton(copias_frame, text="2 copias", variable=self.copias_var, value=2).pack(side=tk.LEFT, padx=10)
         
 # #
-
 
 
 
@@ -2627,7 +2652,7 @@ class DailyStatisticsWindow(tk.Toplevel):
     def __init__(self, parent, metodos_pago, fecha):
         super().__init__(parent)
         self.title("Estadísticas Detalladas del Día")
-        self.geometry("1000x600")
+        self.geometry("1200x600")
         self.resizable(True, True)
         
         self.metodos_pago = metodos_pago
@@ -2640,79 +2665,140 @@ class DailyStatisticsWindow(tk.Toplevel):
         # Frame superior con título y fecha
         top_frame = ttk.Frame(self)
         top_frame.pack(fill=tk.X, padx=15, pady=10)
-        
+
         ttk.Label(top_frame, text=f"Estadísticas Detalladas - {self.fecha}", 
                   font=('Arial', 16, 'bold')).pack(side=tk.LEFT)
-        
+
         # Frame con tabs para cada método de pago
         notebook = ttk.Notebook(self)
         notebook.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
         
+
         # Crear una pestaña para cada método de pago
         for metodo_pago in sorted(self.metodos_pago.keys()):
             datos = self.metodos_pago[metodo_pago]
             tab = ttk.Frame(notebook)
             notebook.add(tab, text=f"{metodo_pago} ({datos['cantidad']})")
-            
             self.crear_tabla_metodo(tab, metodo_pago, datos)
+
+            # Separar facturas en dos listas: pago punto y resto
+            facturas_pago_punto = []
+            facturas_otros = []
+            for factura in datos['facturas']:
+                # La dirección está en la posición 3 o 4 según estructura, revisar y ajustar si necesario
+                # Estructura: (id, num_factura, fecha_hora, cliente, metodo_pago, valor_total, observaciones, ...)
+                # Pero para facturas_completas: (id, num_factura, fecha, nom_cliente, direccion, metodo_pago, ...)
+                # Usamos try para soportar ambas
+                try:
+                    direccion = factura[4] if len(factura) > 4 else ""
+                except Exception:
+                    direccion = ""
+                if isinstance(direccion, str) and direccion.strip().lower() == "pago punto":
+                    facturas_pago_punto.append(factura)
+                else:
+                    facturas_otros.append(factura)
+
+            # Crear dos frames dentro de la pestaña: uno para pago punto, otro para el resto
+            frame_pago_punto = ttk.LabelFrame(tab, text="Facturas con dirección 'pago punto'", padding="5")
+            frame_pago_punto.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+            frame_otros = ttk.LabelFrame(tab, text="Facturas con otras direcciones", padding="5")
+            frame_otros.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+
+            # Datos para cada tabla
+            datos_pago_punto = dict(datos)
+            datos_pago_punto['facturas'] = facturas_pago_punto
+            datos_pago_punto['cantidad'] = len(facturas_pago_punto)
+            datos_pago_punto['total'] = sum(f[5] for f in facturas_pago_punto) if facturas_pago_punto else 0
+
+            datos_otros = dict(datos)
+            datos_otros['facturas'] = facturas_otros
+            datos_otros['cantidad'] = len(facturas_otros)
+            datos_otros['total'] = sum(f[5] for f in facturas_otros) if facturas_otros else 0
+
+            # Crear tablas
+            self.crear_tabla_metodo(frame_pago_punto, metodo_pago, datos_pago_punto)
+            self.crear_tabla_metodo(frame_otros, metodo_pago, datos_otros)
     
     def crear_tabla_metodo(self, parent_frame, metodo_pago, datos):
-        """Crea una tabla con las facturas de un método de pago específico."""
+        """Crea una tabla con las facturas de un método de pago específico, cada una con su propio saldo y checks."""
         # Frame superior con resumen
         summary_frame = ttk.LabelFrame(parent_frame, text="Resumen", padding="10")
         summary_frame.pack(fill=tk.X, padx=10, pady=10)
-        
-        ttk.Label(summary_frame, text=f"Cantidad de ventas: {datos['cantidad']}", 
-                  font=('Arial', 11, 'bold')).pack(side=tk.LEFT, padx=20)
-        ttk.Label(summary_frame, text=f"Total: ${datos['total']:,.0f}", 
-                  font=('Arial', 11, 'bold'), foreground='green').pack(side=tk.LEFT, padx=20)
-        
+        ttk.Label(summary_frame, text=f"Cantidad de ventas: {datos['cantidad']}", font=('Arial', 11, 'bold')).pack(side=tk.LEFT, padx=20)
+        ttk.Label(summary_frame, text=f"Total: ${datos['total']:,.0f}", font=('Arial', 11, 'bold'), foreground='green').pack(side=tk.LEFT, padx=20)
+        saldo_pendiente_var = tk.StringVar()
+        saldo_pendiente_var.set(f"Saldo Pendiente: ${datos['total']:,.0f}")
+        saldo_pendiente_label = ttk.Label(summary_frame, textvariable=saldo_pendiente_var, font=('Arial', 11, 'bold'), foreground='red')
+        saldo_pendiente_label.pack(side=tk.LEFT, padx=20)
+
         # Frame con tabla de facturas
         table_frame = ttk.LabelFrame(parent_frame, text=f"Facturas - {metodo_pago}", padding="10")
         table_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
-        
-        # Crear Treeview
-        tree = ttk.Treeview(table_frame, columns=("ID", "Nº Factura", "Hora", "Cliente", "Total", "Observaciones"), 
-                           show="headings", height=15)
-        
-        # Configurar encabezados
+
+        # Crear Treeview con columna de check
+        columns = ("ID", "Nº Factura", "Hora", "Check", "Cliente", "Total", "Observaciones")
+        tree = ttk.Treeview(table_frame, columns=columns, show="headings", height=15)
         tree.heading("ID", text="ID")
         tree.heading("Nº Factura", text="Nº Factura")
         tree.heading("Hora", text="Hora")
+        tree.heading("Check", text="Check")
         tree.heading("Cliente", text="Cliente")
         tree.heading("Total", text="Total")
         tree.heading("Observaciones", text="Observaciones")
-        
-        # Configurar ancho de columnas
         tree.column("ID", width=50)
         tree.column("Nº Factura", width=80)
         tree.column("Hora", width=80)
+        tree.column("Check", width=60, anchor="center")
         tree.column("Cliente", width=120)
         tree.column("Total", width=100)
         tree.column("Observaciones", width=250)
-        
+
+        # Estado de checks: dict item_id -> bool
+        check_states = {}
+        check_valores = {}
+
         # Agregar datos a la tabla
-        for factura in datos['facturas']:
+        for idx, factura in enumerate(datos['facturas']):
             fact_id, num_factura, fecha_hora, cliente, metodo, valor_total, observaciones = factura
-            
-            # Extraer solo la hora de fecha_hora
             hora = fecha_hora.split(" ")[1] if " " in fecha_hora else fecha_hora
-            
-            # Limitar observaciones a 50 caracteres para visualización
             obs_display = (observaciones[:50] + "...") if observaciones and len(observaciones) > 50 else (observaciones or "-")
-            
-            tree.insert("", tk.END, values=(
+            item_id = tree.insert("", tk.END, values=(
                 fact_id,
                 num_factura,
                 hora,
+                "✗",  # Inicialmente desmarcado
                 cliente if cliente else "No especificado",
                 f"${valor_total:,.0f}".replace(",", "."),
                 obs_display
             ))
-        
+            check_states[item_id] = False
+            check_valores[item_id] = valor_total
+
         # Agregar scrollbar
         scrollbar = ttk.Scrollbar(table_frame, orient="vertical", command=tree.yview)
         tree.configure(yscrollcommand=scrollbar.set)
-        
         tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+
+        def on_tree_click(event):
+            region = tree.identify("region", event.x, event.y)
+            if region != "cell":
+                return
+            col = tree.identify_column(event.x)
+            if col != "#4":  # Columna Check
+                return
+            row_id = tree.identify_row(event.y)
+            if not row_id:
+                return
+            # Alternar estado
+            current = check_states.get(row_id, False)
+            new_state = not current
+            check_states[row_id] = new_state
+            tree.set(row_id, "Check", "✓" if new_state else "✗")
+            # Actualizar saldo pendiente
+            total = datos['total']
+            checked_sum = sum(check_valores[iid] for iid, checked in check_states.items() if checked)
+            saldo = total - checked_sum
+            saldo_pendiente_var.set(f"Saldo Pendiente: ${saldo:,.0f}")
+
+        tree.bind("<Button-1>", on_tree_click)
