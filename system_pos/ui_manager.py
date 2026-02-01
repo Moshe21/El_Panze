@@ -1331,14 +1331,9 @@ class POSApp:
                         import traceback
                         traceback.print_exc()
                 
-                ObservationsModal(self.root, items, on_observations_saved)
+                ObservationsModal(self.root, items, on_observations_saved, app=self)
             
-            PaymentMethodModal( self.root,
-                                total_with_shipping,
-                                on_payment_method,
-                                app=self,
-                                client=client,
-                                address=address)
+            PaymentMethodModal( self.root, total_with_shipping, on_payment_method,  app=self, client=client, address=address)
         
         AddressModal(self.root, on_address_selected)
        
@@ -1563,6 +1558,455 @@ class POSApp:
 
 
 
+class AddressModal(tk.Toplevel):
+    """Modal para seleccionar dirección de envío con autocompletado."""
+    def __init__(self, parent, callback):
+        super().__init__(parent)
+        self.title("Seleccionar Dirección")
+        self.geometry("600x450")
+        self.resizable(False, False)
+        self.callback = callback
+        self.selected_address = None
+        self.shipping_cost = 0
+        
+        # Cargar direcciones desde la base de datos (si está vacía, se siembran las por defecto)
+        try:
+            db_manager.ensure_default_addresses()
+            self.direcciones = db_manager.get_all_addresses()
+        except Exception:
+            # Fallback mínimo si hay problemas con la DB
+            self.direcciones = ["Sin conexión a DB"]
+        
+        try:
+            self.free_addresses = db_manager.get_free_addresses()
+        except Exception:
+            self.free_addresses = []
+        
+        self.create_widgets()
+        self.transient(parent)
+        self.grab_set()
+    
+    def create_widgets(self):
+        main_frame = ttk.Frame(self)
+        main_frame.pack(fill=tk.BOTH, expand=True, padx=15, pady=15)
+
+        # informacion del cliente
+        ttk.Label(main_frame, text="Nombre cliente", font=('Arial', 14, 'bold')).pack(pady=10)
+        
+        self.client = ttk.Entry(main_frame, font=('Arial', 11), width=50)
+        self.client.pack(fill=tk.X, pady=5)
+        
+        ttk.Label(main_frame, text="Seleccionar Dirección", font=('Arial', 14, 'bold')).pack(pady=10)
+        ttk.Label(main_frame, text="Escribe para filtrar:", font=('Arial', 10)).pack(anchor='w', pady=(10, 5))
+        
+        # Entry con autocompletado
+        self.address_entry = AutocompleteEntry(main_frame, self.direcciones, 
+                                               callback_on_select=self.on_address_selected,
+                                               callback_on_change=self.on_address_changed,
+                                               font=('Arial', 11), width=50)
+        self.address_entry.pack(fill=tk.X, pady=5)
+        
+        # Label de información (costo de envío)
+        self.info_label = ttk.Label(main_frame, text="", foreground="green", font=('Arial', 10))
+        self.info_label.pack(pady=10)
+        
+        # Label de dirección seleccionada
+        self.selected_label = ttk.Label(main_frame, text="Dirección seleccionada: Ninguna", 
+                                        font=('Arial', 10, 'italic'), foreground="blue")
+        self.selected_label.pack(pady=10)
+        
+        
+        # Botones
+        button_frame = ttk.Frame(main_frame)
+        button_frame.pack(fill=tk.X, pady=20)
+        
+        ttk.Button(button_frame, text="✓ Confirmar", command=self.confirm_address, width=20).pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
+        ttk.Button(button_frame, text="✕ Cancelar", command=self.cancel, width=20).pack(side=tk.RIGHT, padx=5, fill=tk.X, expand=True)
+    
+    def on_address_changed(self, address):
+        """Se ejecuta cuando el usuario escribe cualquier texto en el entry."""
+        address = address.strip()
+        
+        if address:  # Si hay algo escrito
+            # Actualizar el label con cualquier texto que escriba
+            self.selected_label.config(text=f"Dirección seleccionada: {address}")
+            self.selected_address = address
+            
+            # Validar si está en la lista de direcciones
+            if address in self.direcciones:
+                if address in self.free_addresses:
+                    self.info_label.config(text="✓ Envío incluido", foreground="green")
+                    self.shipping_cost = 0
+                else:
+                    self.info_label.config(text="🚚 Costo de envío: $3.000", foreground="red")
+                    self.shipping_cost = 0
+            else:
+                # Dirección personalizada (no en la lista)
+                self.info_label.config(text="🚚 Costo de envío: $3.000", foreground="red")
+                self.shipping_cost = 0
+        else:
+            # Si está vacío, limpiar
+            self.selected_label.config(text="Dirección seleccionada: Ninguna")
+            self.info_label.config(text="", foreground="green")
+            self.selected_address = None
+            self.shipping_cost = 0
+    
+    def on_address_selected(self, address):
+        """Se ejecuta cuando selecciona una dirección del autocompletado (legacy, mantenido para compatibilidad)."""
+        self.on_address_changed(address)
+    
+    def confirm_address(self):
+        self.callback(self.selected_address, self.shipping_cost, self.client.get())
+        self.destroy()
+    
+    def cancel(self):
+        self.destroy()
+
+class PaymentMethodModal(tk.Toplevel):
+    """Modal para seleccionar método de pago."""
+    def __init__(self, parent, total, callback, app, client, address):
+        super().__init__(parent)
+        self.app = app
+        self.client = client
+        self.address = address
+        self.callback = callback
+        self.total = total
+        self.title("¿Cómo deseas pagar?")
+        self.geometry("400x450")
+        self.resizable(False, False)
+        self.callback = callback
+        self.total = total
+        
+        
+        self.create_widgets()
+        self.transient(parent)
+        self.grab_set()
+    
+    def create_widgets(self):
+        main_frame = ttk.Frame(self)
+        main_frame.pack(fill=tk.BOTH, expand=True, padx=15, pady=15)
+        
+        ttk.Label(main_frame, text="¿Cómo deseas pagar?", font=('Arial', 14, 'bold')).pack(pady=10)
+        ttk.Label(main_frame, text=f"Total: ${self.total:,.0f}", font=('Arial', 12)).pack(pady=10)
+        
+        button_frame = ttk.Frame(main_frame)
+        button_frame.pack(fill=tk.BOTH, expand=True, pady=20)
+        ttk.Button(button_frame, text="💵 EFECTIVO", command=lambda: self.select_payment('EFECTIVO')).pack(fill=tk.X, pady=5)
+        ttk.Button(button_frame, text="💳 NEQUI", command=lambda: self.select_payment('NEQUI')).pack(fill=tk.X, pady=5)
+        ttk.Button(button_frame, text="💳 DAVIPLATA", command=lambda: self.select_payment('DAVIPLATA')).pack(fill=tk.X, pady=5)
+        ttk.Button(button_frame, text="🔀 PAGO DIVIDIDO", command=self.select_split_payment).pack(fill=tk.X, pady=5)
+        
+        ttk.Button(button_frame, text="💾 Guardar pedido pendiente", command=lambda: self.app.save_pending_order(
+                            client=self.client if hasattr(self, 'client') and self.client else getattr(self.app, 'client', ''),
+                            address=self.address if hasattr(self, 'address') and self.address else getattr(self.app, 'address', ''),
+                            payment_method=getattr(self, 'selected_method', None)  # Asegúrate de pasar el método de pago si lo tienes
+                            )
+                  ).pack(fill=tk.X, pady=5)
+
+        # Botón Volver
+        ttk.Button(button_frame, text="⬅ Volver", command=self.on_back).pack(fill=tk.X, pady=5)
+
+    def on_back(self):
+        self.destroy()
+        # Volver al modal anterior (dirección)
+        # Se asume que process_sale vuelve a llamar AddressModal
+        if hasattr(self.app, 'process_sale'):
+            self.app.process_sale()
+
+
+    def select_payment(self, method):
+        if method == 'EFECTIVO':
+            self.destroy()
+            CashPaymentModal(self.master, self.total, self.callback, app=self.app)
+        else:
+            self.callback(method, self.total, 0)
+            self.destroy()
+    
+    def select_split_payment(self):
+        """Abre modal para pago dividido entre dos métodos."""
+        self.destroy()
+        SplitPaymentModal(self.master, self.total, self.callback)
+
+class CashPaymentModal(tk.Toplevel):
+    """Modal para pago en efectivo."""
+    def __init__(self, parent, total, callback, app=None):
+        super().__init__(parent)
+        self.title("Pago en Efectivo")
+        self.geometry("450x600")
+        self.resizable(False, False)
+        self.callback = callback
+        self.total = total
+        self.app = app
+        
+        self.create_widgets()
+        self.transient(parent)
+        self.grab_set()
+    
+    def create_widgets(self):
+        main_frame = ttk.Frame(self)
+        main_frame.pack(fill=tk.BOTH, expand=True, padx=15, pady=15)
+        
+        ttk.Label(main_frame, text="Pago en Efectivo", font=('Arial', 16, 'bold')).pack(pady=10)
+        ttk.Label(main_frame, text=f"Total a pagar: ${self.total:,.0f}".replace(",", "."), font=('Arial', 12, 'bold')).pack(pady=10)
+        
+        ttk.Label(main_frame, text="¿Con cuánto vas a pagar?").pack(anchor='w', pady=(10, 5))
+        self.amount_entry = ttk.Entry(main_frame, font=('Arial', 12))
+        self.amount_entry.pack(fill=tk.X, pady=5)
+        self.amount_entry.bind("<KeyRelease>", self.calculate_change)
+        
+        ttk.Label(main_frame, text="Tu cambio:").pack(anchor='w', pady=(10, 5))
+        self.change_label = ttk.Label(main_frame, text="$0", font=('Arial', 12, 'bold'), foreground='green')
+        self.change_label.pack(anchor='w', pady=5)
+        
+        button_frame = ttk.Frame(main_frame)
+        button_frame.pack(fill=tk.X, pady=20)
+        
+        ttk.Button(button_frame, text="Confirmar Pago", command=self.confirm_payment).pack(side=tk.LEFT, padx=5)
+        ttk.Button(button_frame, text="Cancelar", command=self.destroy).pack(side=tk.RIGHT, padx=5)
+        # Botón Volver
+        ttk.Button(button_frame, text="⬅ Volver", command=self.on_back).pack(side=tk.BOTTOM, fill=tk.X, pady=5)
+
+    def on_back(self):
+        self.destroy()
+        # Volver al modal anterior (método de pago)
+        if self.app and hasattr(self.app, 'process_sale'):
+            self.app.process_sale()
+    
+    def calculate_change(self, event=None):
+        try:
+            # Obtener el valor sin formato
+            amount_str = self.amount_entry.get().replace(".", "")
+            amount = float(amount_str) if amount_str else 0
+            
+            # Calcular cambio
+            change = max(0, amount - self.total)
+            
+            # Formatear con miles y actualizar label de cambio
+            change_formatted = f"${change:,.0f}".replace(",", ".")
+            self.change_label.config(text=change_formatted)
+            
+            # Formatear entrada con miles mientras escribes
+            if amount > 0:
+                amount_formatted = f"{amount:,.0f}".replace(",", ".")
+                # Solo actualizar si es diferente (evita loops)
+                if self.amount_entry.get() != amount_formatted:
+                    self.amount_entry.delete(0, tk.END)
+                    self.amount_entry.insert(0, amount_formatted)
+        except ValueError:
+            self.change_label.config(text="$0")
+    
+    def confirm_payment(self):
+        try:
+            amount = float(self.amount_entry.get().replace(".", ""))
+            if amount < self.total:
+                messagebox.showwarning("Error", "El monto debe ser mayor o igual al total.")
+                return
+            change = amount - self.total
+            self.callback('EFECTIVO', amount, change)
+            self.destroy()
+        except ValueError:
+            messagebox.showwarning("Error", "Por favor ingresa un monto válido.")
+
+class SplitPaymentModal(tk.Toplevel):
+    """Modal para pago dividido entre dos métodos de pago."""
+    def __init__(self, parent, total, callback):
+        super().__init__(parent)
+        self.title("Pago Dividido")
+        self.geometry("500x500")
+        self.resizable(False, False)
+        self.callback = callback
+        self.total = total
+        self.method1 = None
+        self.amount1 = 0
+        self.method2 = None
+        self.amount2 = 0
+        self.current_step = 1  # 1 o 2
+        
+        self.create_widgets()
+        self.transient(parent)
+        self.grab_set()
+    
+    def create_widgets(self):
+        main_frame = ttk.Frame(self)
+        main_frame.pack(fill=tk.BOTH, expand=True, padx=15, pady=15)
+        
+        ttk.Label(main_frame, text="Pago Dividido", font=('Arial', 16, 'bold')).pack(pady=10)
+        ttk.Label(main_frame, text=f"Total a pagar: ${self.total:,.0f}".replace(",", "."), 
+                  font=('Arial', 12)).pack(pady=10)
+        
+        # Frame para mostrar progreso
+        self.progress_label = ttk.Label(main_frame, text="Paso 1 de 2: Selecciona primer método de pago", 
+                                        font=('Arial', 10, 'italic'))
+        self.progress_label.pack(pady=10)
+        
+        # Frame para los botones de método de pago
+        self.button_frame = ttk.Frame(main_frame)
+        self.button_frame.pack(fill=tk.BOTH, expand=True, pady=15)
+        
+        self.show_method_selection(1)
+    
+    def show_method_selection(self, step):
+        """Muestra la selección de método para el paso indicado."""
+        # Limpiar frame anterior
+        for widget in self.button_frame.winfo_children():
+            widget.destroy()
+        
+        self.current_step = step
+        self.progress_label.config(text=f"Paso {step} de 2: Selecciona el método de pago #{step}")
+        
+        ttk.Button(self.button_frame, text="💵 EFECTIVO", 
+                   command=lambda: self.select_method(step, 'EFECTIVO')).pack(fill=tk.X, pady=5)
+        ttk.Button(self.button_frame, text="💳 NEQUI", 
+                   command=lambda: self.select_method(step, 'NEQUI')).pack(fill=tk.X, pady=5)
+        ttk.Button(self.button_frame, text="💳 DAVIPLATA", 
+                   command=lambda: self.select_method(step, 'DAVIPLATA')).pack(fill=tk.X, pady=5)
+    
+    def select_method(self, step, method):
+        """Selecciona el método y pide el monto."""
+        if step == 1:
+            self.method1 = method
+            if method == 'EFECTIVO':
+                self.show_amount_input(1)
+            else:
+                # Para métodos digitales, permitir ingresar monto
+                self.show_amount_input(1)
+        elif step == 2:
+            self.method2 = method
+            if method == 'EFECTIVO':
+                self.show_amount_input(2)
+            else:
+                self.show_amount_input(2)
+    
+    def show_amount_input(self, step):
+        """Muestra input para capturar monto del pago."""
+        # Limpiar frame
+        for widget in self.button_frame.winfo_children():
+            widget.destroy()
+        
+        remaining = self.total - (self.amount1 if step == 2 else 0)
+        
+        ttk.Label(self.button_frame, text=f"¿Cuánto pagas con {self.method1 if step == 1 else self.method2}?", 
+                  font=('Arial', 12, 'bold')).pack(pady=10)
+        ttk.Label(self.button_frame, text=f"Monto pendiente: ${remaining:,.0f}".replace(",", "."), 
+                  font=('Arial', 10)).pack(pady=5)
+        
+        amount_entry = ttk.Entry(self.button_frame, font=('Arial', 12), width=25)
+        amount_entry.pack(pady=10, ipady=5)
+        amount_entry.focus()
+        
+        def confirm_amount():
+            try:
+                amount = float(amount_entry.get().replace(".", ""))
+                
+                if step == 1:
+                    if amount <= 0 or amount > self.total:
+                        messagebox.showwarning("Error", f"El monto debe estar entre 0 y ${self.total:,.0f}")
+                        return
+                    self.amount1 = amount
+                    remaining_for_step2 = self.total - self.amount1
+                    
+                    # Pasar al siguiente paso
+                    self.show_method_selection(2)
+                elif step == 2:
+                    remaining = self.total - self.amount1
+                    if amount <= 0 or amount > remaining + 1:  # +1 para permitir pequeños redondes
+                        messagebox.showwarning("Error", f"El monto debe estar entre 0 y ${remaining:,.0f}")
+                        return
+                    self.amount2 = amount
+                    
+                    # Completar el pago dividido
+                    self.complete_split_payment()
+            except ValueError:
+                messagebox.showwarning("Error", "Por favor ingresa un monto válido.")
+        
+        ttk.Button(self.button_frame, text="Confirmar", command=confirm_amount).pack(pady=10, ipadx=20)
+    
+    def complete_split_payment(self):
+        """Completa el pago dividido y devuelve los datos al callback."""
+        # Pasar datos como tupla: (method1, method2, amount1, amount2)
+        self.callback((self.method1, self.method2, self.amount1, self.amount2), None, None)
+        self.destroy()
+
+class ObservationsModal(tk.Toplevel):
+    """Modal para capturar observaciones de cada producto en el carrito."""
+    def __init__(self, parent, items, callback, app=None):
+        super().__init__(parent)
+        self.title("Observaciones de Productos")
+        self.geometry("600x400")
+        self.resizable(True, True)
+        self.callback = callback
+        self.items = items
+        self.app = app
+        self.observations_entries = {}
+        
+        self.create_widgets()
+        self.transient(parent)
+        self.grab_set()
+    
+    def create_widgets(self):
+        # Frame superior con título
+        top_frame = ttk.Frame(self)
+        top_frame.pack(fill=tk.X, padx=15, pady=10)
+        
+        ttk.Label(top_frame, text="Agregar Observaciones a los Productos", font=('Arial', 14, 'bold')).pack(anchor='w')
+        ttk.Label(top_frame, text="(Opcional - deja en blanco si no hay observaciones)", font=('Arial', 9, 'italic')).pack(anchor='w')
+        
+        # Frame con scroll para los productos
+        canvas = tk.Canvas(self)
+        scrollbar = ttk.Scrollbar(self, orient="vertical", command=canvas.yview)
+        scrollable_frame = ttk.Frame(canvas)
+        
+        scrollable_frame.bind(
+            "<Configure>",
+            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+        )
+        
+        canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
+        
+        # Crear campo de texto para cada producto
+        for item in self.items:
+            product_name = item.get("nombre", "Producto Desconocido")
+            cantidad = item.get("cantidad", 1)
+            
+            # Frame para cada producto
+            item_frame = ttk.LabelFrame(scrollable_frame, text=f"{product_name} (x{cantidad})", padding="10")
+            item_frame.pack(fill=tk.X, padx=10, pady=5)
+            
+            # Text widget para observaciones
+            obs_text = tk.Text(item_frame, height=3, width=50, font=('Arial', 9), bg=PALETTE_BG2, fg=PALETTE_DARK)
+            obs_text.pack(fill=tk.X)
+            
+            self.observations_entries[product_name] = obs_text
+        
+        # Empacar canvas y scrollbar
+        canvas.pack(side="left", fill="both", expand=True, padx=15, pady=10)
+        scrollbar.pack(side="right", fill="y", padx=(0, 15))
+        
+        # Frame inferior con botones
+        button_frame = ttk.Frame(self)
+        button_frame.pack(fill=tk.X, padx=15, pady=15)
+        
+        ttk.Button(button_frame, text="✓ Guardar y Continuar", command=self.save_observations).pack( padx=5, fill=tk.X, expand=True)
+        ttk.Button(button_frame, text="✕ Cancelar", command=self.destroy).pack( padx=5, fill=tk.X, expand=True)
+        # Botón Volver
+        ttk.Button(button_frame, text="⬅ Volver", command=self.on_back).pack( fill=tk.X, pady=5)
+
+    def on_back(self):
+        self.destroy()
+        # Volver al modal anterior (método de pago)
+        # Se asume que process_sale vuelve a llamar PaymentMethodModal
+        if self.app and hasattr(self.app, 'process_sale'):
+            self.app.process_sale()
+    
+    def save_observations(self):
+        """Guarda todas las observaciones y cierra el modal."""
+        observations = {}
+        for product_name, text_widget in self.observations_entries.items():
+            observations[product_name] = text_widget.get("1.0", tk.END).strip()
+        self.destroy()  # Cerrar el modal inmediatamente al oprimir el botón
+        self.callback(observations)
+
 
 
 
@@ -1721,86 +2165,6 @@ class PendingOrdersModal(tk.Toplevel):
            
             db_manager.delete_pending_order(order_id)
             self.load_orders()
-
-class ObservationsModal(tk.Toplevel):
-    """Modal para capturar observaciones de cada producto en el carrito."""
-    def __init__(self, parent, items, callback):
-        super().__init__(parent)
-        self.title("Observaciones de Productos")
-        self.geometry("600x400")
-        self.resizable(True, True)
-        self.callback = callback
-        self.items = items
-        self.observations_entries = {}
-        
-        self.create_widgets()
-        self.transient(parent)
-        self.grab_set()
-    
-    def create_widgets(self):
-        # Frame superior con título
-        top_frame = ttk.Frame(self)
-        top_frame.pack(fill=tk.X, padx=15, pady=10)
-        
-        ttk.Label(top_frame, text="Agregar Observaciones a los Productos", font=('Arial', 14, 'bold')).pack(anchor='w')
-        ttk.Label(top_frame, text="(Opcional - deja en blanco si no hay observaciones)", font=('Arial', 9, 'italic')).pack(anchor='w')
-        
-        # Frame con scroll para los productos
-        canvas = tk.Canvas(self)
-        scrollbar = ttk.Scrollbar(self, orient="vertical", command=canvas.yview)
-        scrollable_frame = ttk.Frame(canvas)
-        
-        scrollable_frame.bind(
-            "<Configure>",
-            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
-        )
-        
-        canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
-        canvas.configure(yscrollcommand=scrollbar.set)
-        
-        # Crear campo de texto para cada producto
-        for item in self.items:
-            product_name = item.get("nombre", "Producto Desconocido")
-            cantidad = item.get("cantidad", 1)
-            
-            # Frame para cada producto
-            item_frame = ttk.LabelFrame(scrollable_frame, text=f"{product_name} (x{cantidad})", padding="10")
-            item_frame.pack(fill=tk.X, padx=10, pady=5)
-            
-            # Text widget para observaciones
-            obs_text = tk.Text(item_frame, height=3, width=50, font=('Arial', 9), bg=PALETTE_BG2, fg=PALETTE_DARK)
-            obs_text.pack(fill=tk.X)
-            
-            self.observations_entries[product_name] = obs_text
-        
-        # Empacar canvas y scrollbar
-        canvas.pack(side="left", fill="both", expand=True, padx=15, pady=10)
-        scrollbar.pack(side="right", fill="y", padx=(0, 15))
-        
-        # Frame inferior con botones
-        button_frame = ttk.Frame(self)
-        button_frame.pack(fill=tk.X, padx=15, pady=15)
-        
-        ttk.Button(button_frame, text="✓ Guardar y Continuar", command=self.save_observations).pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
-        ttk.Button(button_frame, text="✕ Cancelar", command=self.destroy).pack(side=tk.RIGHT, padx=5, fill=tk.X, expand=True)
-        # Botón Volver
-        ttk.Button(button_frame, text="⬅ Volver", command=self.on_back).pack(side=tk.BOTTOM, fill=tk.X, pady=5)
-
-    def on_back(self):
-        self.destroy()
-        # Volver al modal anterior (método de pago)
-        # Se asume que process_sale vuelve a llamar PaymentMethodModal
-        if hasattr(self.master, 'process_sale'):
-            self.master.process_sale()
-    
-    def save_observations(self):
-        """Guarda todas las observaciones y cierra el modal."""
-        observations = {}
-        for product_name, text_widget in self.observations_entries.items():
-            observations[product_name] = text_widget.get("1.0", tk.END).strip()
-        self.destroy()  # Cerrar el modal inmediatamente al oprimir el botón
-        self.callback(observations)
-
 
 class FacturasWindow(tk.Toplevel):
     """Ventana para visualizar y gestionar todas las facturas."""
@@ -2178,396 +2542,6 @@ class AutocompleteEntry(ttk.Entry):
                 self.listbox_visible = False
 
 
-class AddressModal(tk.Toplevel):
-    """Modal para seleccionar dirección de envío con autocompletado."""
-    def __init__(self, parent, callback):
-        super().__init__(parent)
-        self.title("Seleccionar Dirección")
-        self.geometry("600x450")
-        self.resizable(False, False)
-        self.callback = callback
-        self.selected_address = None
-        self.shipping_cost = 0
-        
-        # Cargar direcciones desde la base de datos (si está vacía, se siembran las por defecto)
-        try:
-            db_manager.ensure_default_addresses()
-            self.direcciones = db_manager.get_all_addresses()
-        except Exception:
-            # Fallback mínimo si hay problemas con la DB
-            self.direcciones = ["Sin conexión a DB"]
-        
-        try:
-            self.free_addresses = db_manager.get_free_addresses()
-        except Exception:
-            self.free_addresses = []
-        
-        self.create_widgets()
-        self.transient(parent)
-        self.grab_set()
-    
-    def create_widgets(self):
-        main_frame = ttk.Frame(self)
-        main_frame.pack(fill=tk.BOTH, expand=True, padx=15, pady=15)
-
-        # informacion del cliente
-        ttk.Label(main_frame, text="Nombre cliente", font=('Arial', 14, 'bold')).pack(pady=10)
-        
-        self.client = ttk.Entry(main_frame, font=('Arial', 11), width=50)
-        self.client.pack(fill=tk.X, pady=5)
-        
-        ttk.Label(main_frame, text="Seleccionar Dirección", font=('Arial', 14, 'bold')).pack(pady=10)
-        ttk.Label(main_frame, text="Escribe para filtrar:", font=('Arial', 10)).pack(anchor='w', pady=(10, 5))
-        
-        # Entry con autocompletado
-        self.address_entry = AutocompleteEntry(main_frame, self.direcciones, 
-                                               callback_on_select=self.on_address_selected,
-                                               callback_on_change=self.on_address_changed,
-                                               font=('Arial', 11), width=50)
-        self.address_entry.pack(fill=tk.X, pady=5)
-        
-        # Label de información (costo de envío)
-        self.info_label = ttk.Label(main_frame, text="", foreground="green", font=('Arial', 10))
-        self.info_label.pack(pady=10)
-        
-        # Label de dirección seleccionada
-        self.selected_label = ttk.Label(main_frame, text="Dirección seleccionada: Ninguna", 
-                                        font=('Arial', 10, 'italic'), foreground="blue")
-        self.selected_label.pack(pady=10)
-        
-        
-        # Botones
-        button_frame = ttk.Frame(main_frame)
-        button_frame.pack(fill=tk.X, pady=20)
-        
-        ttk.Button(button_frame, text="✓ Confirmar", command=self.confirm_address, width=20).pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
-        ttk.Button(button_frame, text="✕ Cancelar", command=self.cancel, width=20).pack(side=tk.RIGHT, padx=5, fill=tk.X, expand=True)
-    
-    def on_address_changed(self, address):
-        """Se ejecuta cuando el usuario escribe cualquier texto en el entry."""
-        address = address.strip()
-        
-        if address:  # Si hay algo escrito
-            # Actualizar el label con cualquier texto que escriba
-            self.selected_label.config(text=f"Dirección seleccionada: {address}")
-            self.selected_address = address
-            
-            # Validar si está en la lista de direcciones
-            if address in self.direcciones:
-                if address in self.free_addresses:
-                    self.info_label.config(text="✓ Envío incluido", foreground="green")
-                    self.shipping_cost = 0
-                else:
-                    self.info_label.config(text="🚚 Costo de envío: $3.000", foreground="red")
-                    self.shipping_cost = 0
-            else:
-                # Dirección personalizada (no en la lista)
-                self.info_label.config(text="🚚 Costo de envío: $3.000", foreground="red")
-                self.shipping_cost = 0
-        else:
-            # Si está vacío, limpiar
-            self.selected_label.config(text="Dirección seleccionada: Ninguna")
-            self.info_label.config(text="", foreground="green")
-            self.selected_address = None
-            self.shipping_cost = 0
-    
-    def on_address_selected(self, address):
-        """Se ejecuta cuando selecciona una dirección del autocompletado (legacy, mantenido para compatibilidad)."""
-        self.on_address_changed(address)
-    
-    def confirm_address(self):
-        self.callback(self.selected_address, self.shipping_cost, self.client.get())
-        self.destroy()
-    
-    def cancel(self):
-        self.destroy()
-class PaymentMethodModal(tk.Toplevel):
-    """Modal para seleccionar método de pago."""
-    def __init__(self, parent, total, callback, app, client, address):
-        super().__init__(parent)
-        self.app = app
-        self.client = client
-        self.address = address
-        self.callback = callback
-        self.total = total
-        self.title("¿Cómo deseas pagar?")
-        self.geometry("400x450")
-        self.resizable(False, False)
-        self.callback = callback
-        self.total = total
-        
-        
-        self.create_widgets()
-        self.transient(parent)
-        self.grab_set()
-    
-    def create_widgets(self):
-        main_frame = ttk.Frame(self)
-        main_frame.pack(fill=tk.BOTH, expand=True, padx=15, pady=15)
-        
-        ttk.Label(main_frame, text="¿Cómo deseas pagar?", font=('Arial', 14, 'bold')).pack(pady=10)
-        ttk.Label(main_frame, text=f"Total: ${self.total:,.0f}", font=('Arial', 12)).pack(pady=10)
-        
-        button_frame = ttk.Frame(main_frame)
-        button_frame.pack(fill=tk.BOTH, expand=True, pady=20)
-        ttk.Button(button_frame, text="💵 EFECTIVO", command=lambda: self.select_payment('EFECTIVO')).pack(fill=tk.X, pady=5)
-        ttk.Button(button_frame, text="💳 NEQUI", command=lambda: self.select_payment('NEQUI')).pack(fill=tk.X, pady=5)
-        ttk.Button(button_frame, text="💳 DAVIPLATA", command=lambda: self.select_payment('DAVIPLATA')).pack(fill=tk.X, pady=5)
-        ttk.Button(button_frame, text="🔀 PAGO DIVIDIDO", command=self.select_split_payment).pack(fill=tk.X, pady=5)
-        
-        ttk.Button(button_frame,
-                        text="💾 Guardar pedido pendiente",
-                        command=lambda: self.app.save_pending_order(
-                            client=self.client if hasattr(self, 'client') and self.client else getattr(self.app, 'client', ''),
-                            address=self.address if hasattr(self, 'address') and self.address else getattr(self.app, 'address', ''),
-                            payment_method=getattr(self, 'selected_method', None)  # Asegúrate de pasar el método de pago si lo tienes
-                        )
-                    ).pack(fill=tk.X, pady=5)
-
-        # Botón Volver
-        ttk.Button(button_frame, text="⬅ Volver", command=self.on_back).pack(fill=tk.X, pady=5)
-
-    def on_back(self):
-        self.destroy()
-        # Volver al modal anterior (dirección)
-        # Se asume que process_sale vuelve a llamar AddressModal
-        if hasattr(self.app, 'process_sale'):
-            self.app.process_sale()
-
-
-    def select_payment(self, method):
-        if method == 'EFECTIVO':
-            self.destroy()
-            CashPaymentModal(self.master, self.total, self.callback)
-        else:
-            self.callback(method, self.total, 0)
-            self.destroy()
-    
-    def select_split_payment(self):
-        """Abre modal para pago dividido entre dos métodos."""
-        self.destroy()
-        SplitPaymentModal(self.master, self.total, self.callback)
-
-
-class CashPaymentModal(tk.Toplevel):
-    """Modal para pago en efectivo."""
-    def __init__(self, parent, total, callback):
-        super().__init__(parent)
-        self.title("Pago en Efectivo")
-        self.geometry("450x600")
-        self.resizable(False, False)
-        self.callback = callback
-        self.total = total
-        
-        self.create_widgets()
-        self.transient(parent)
-        self.grab_set()
-    
-    def create_widgets(self):
-        main_frame = ttk.Frame(self)
-        main_frame.pack(fill=tk.BOTH, expand=True, padx=15, pady=15)
-
-
-class SplitPaymentModal(tk.Toplevel):
-    """Modal para pago dividido entre dos métodos de pago."""
-    def __init__(self, parent, total, callback):
-        super().__init__(parent)
-        self.title("Pago Dividido")
-        self.geometry("500x500")
-        self.resizable(False, False)
-        self.callback = callback
-        self.total = total
-        self.method1 = None
-        self.amount1 = 0
-        self.method2 = None
-        self.amount2 = 0
-        self.current_step = 1  # 1 o 2
-        
-        self.create_widgets()
-        self.transient(parent)
-        self.grab_set()
-    
-    def create_widgets(self):
-        main_frame = ttk.Frame(self)
-        main_frame.pack(fill=tk.BOTH, expand=True, padx=15, pady=15)
-        
-        ttk.Label(main_frame, text="Pago Dividido", font=('Arial', 16, 'bold')).pack(pady=10)
-        ttk.Label(main_frame, text=f"Total a pagar: ${self.total:,.0f}".replace(",", "."), 
-                  font=('Arial', 12)).pack(pady=10)
-        
-        # Frame para mostrar progreso
-        self.progress_label = ttk.Label(main_frame, text="Paso 1 de 2: Selecciona primer método de pago", 
-                                        font=('Arial', 10, 'italic'))
-        self.progress_label.pack(pady=10)
-        
-        # Frame para los botones de método de pago
-        self.button_frame = ttk.Frame(main_frame)
-        self.button_frame.pack(fill=tk.BOTH, expand=True, pady=15)
-        
-        self.show_method_selection(1)
-    
-    def show_method_selection(self, step):
-        """Muestra la selección de método para el paso indicado."""
-        # Limpiar frame anterior
-        for widget in self.button_frame.winfo_children():
-            widget.destroy()
-        
-        self.current_step = step
-        self.progress_label.config(text=f"Paso {step} de 2: Selecciona el método de pago #{step}")
-        
-        ttk.Button(self.button_frame, text="💵 EFECTIVO", 
-                   command=lambda: self.select_method(step, 'EFECTIVO')).pack(fill=tk.X, pady=5)
-        ttk.Button(self.button_frame, text="💳 NEQUI", 
-                   command=lambda: self.select_method(step, 'NEQUI')).pack(fill=tk.X, pady=5)
-        ttk.Button(self.button_frame, text="💳 DAVIPLATA", 
-                   command=lambda: self.select_method(step, 'DAVIPLATA')).pack(fill=tk.X, pady=5)
-    
-    def select_method(self, step, method):
-        """Selecciona el método y pide el monto."""
-        if step == 1:
-            self.method1 = method
-            if method == 'EFECTIVO':
-                self.show_amount_input(1)
-            else:
-                # Para métodos digitales, permitir ingresar monto
-                self.show_amount_input(1)
-        elif step == 2:
-            self.method2 = method
-            if method == 'EFECTIVO':
-                self.show_amount_input(2)
-            else:
-                self.show_amount_input(2)
-    
-    def show_amount_input(self, step):
-        """Muestra input para capturar monto del pago."""
-        # Limpiar frame
-        for widget in self.button_frame.winfo_children():
-            widget.destroy()
-        
-        remaining = self.total - (self.amount1 if step == 2 else 0)
-        
-        ttk.Label(self.button_frame, text=f"¿Cuánto pagas con {self.method1 if step == 1 else self.method2}?", 
-                  font=('Arial', 12, 'bold')).pack(pady=10)
-        ttk.Label(self.button_frame, text=f"Monto pendiente: ${remaining:,.0f}".replace(",", "."), 
-                  font=('Arial', 10)).pack(pady=5)
-        
-        amount_entry = ttk.Entry(self.button_frame, font=('Arial', 12), width=25)
-        amount_entry.pack(pady=10, ipady=5)
-        amount_entry.focus()
-        
-        def confirm_amount():
-            try:
-                amount = float(amount_entry.get().replace(".", ""))
-                
-                if step == 1:
-                    if amount <= 0 or amount > self.total:
-                        messagebox.showwarning("Error", f"El monto debe estar entre 0 y ${self.total:,.0f}")
-                        return
-                    self.amount1 = amount
-                    remaining_for_step2 = self.total - self.amount1
-                    
-                    # Pasar al siguiente paso
-                    self.show_method_selection(2)
-                elif step == 2:
-                    remaining = self.total - self.amount1
-                    if amount <= 0 or amount > remaining + 1:  # +1 para permitir pequeños redondes
-                        messagebox.showwarning("Error", f"El monto debe estar entre 0 y ${remaining:,.0f}")
-                        return
-                    self.amount2 = amount
-                    
-                    # Completar el pago dividido
-                    self.complete_split_payment()
-            except ValueError:
-                messagebox.showwarning("Error", "Por favor ingresa un monto válido.")
-        
-        ttk.Button(self.button_frame, text="Confirmar", command=confirm_amount).pack(pady=10, ipadx=20)
-    
-    def complete_split_payment(self):
-        """Completa el pago dividido y devuelve los datos al callback."""
-        # Pasar datos como tupla: (method1, method2, amount1, amount2)
-        self.callback((self.method1, self.method2, self.amount1, self.amount2), None, None)
-        self.destroy()
-
-
-class CashPaymentModal(tk.Toplevel):
-    """Modal para pago en efectivo."""
-    def __init__(self, parent, total, callback):
-        super().__init__(parent)
-        self.title("Pago en Efectivo")
-        self.geometry("450x600")
-        self.resizable(False, False)
-        self.callback = callback
-        self.total = total
-        
-        self.create_widgets()
-        self.transient(parent)
-        self.grab_set()
-    
-    def create_widgets(self):
-        main_frame = ttk.Frame(self)
-        main_frame.pack(fill=tk.BOTH, expand=True, padx=15, pady=15)
-        
-        ttk.Label(main_frame, text="Pago en Efectivo", font=('Arial', 16, 'bold')).pack(pady=10)
-        ttk.Label(main_frame, text=f"Total a pagar: ${self.total:,.0f}".replace(",", "."), font=('Arial', 12, 'bold')).pack(pady=10)
-        
-        ttk.Label(main_frame, text="¿Con cuánto vas a pagar?").pack(anchor='w', pady=(10, 5))
-        self.amount_entry = ttk.Entry(main_frame, font=('Arial', 12))
-        self.amount_entry.pack(fill=tk.X, pady=5)
-        self.amount_entry.bind("<KeyRelease>", self.calculate_change)
-        
-        ttk.Label(main_frame, text="Tu cambio:").pack(anchor='w', pady=(10, 5))
-        self.change_label = ttk.Label(main_frame, text="$0", font=('Arial', 12, 'bold'), foreground='green')
-        self.change_label.pack(anchor='w', pady=5)
-        
-        button_frame = ttk.Frame(main_frame)
-        button_frame.pack(fill=tk.X, pady=20)
-        
-        ttk.Button(button_frame, text="Confirmar Pago", command=self.confirm_payment).pack(side=tk.LEFT, padx=5)
-        ttk.Button(button_frame, text="Cancelar", command=self.destroy).pack(side=tk.RIGHT, padx=5)
-        # Botón Volver
-        ttk.Button(button_frame, text="⬅ Volver", command=self.on_back).pack(side=tk.BOTTOM, fill=tk.X, pady=5)
-
-    def on_back(self):
-        self.destroy()
-        # Volver al modal anterior (método de pago)
-        if hasattr(self.master, 'process_sale'):
-            self.master.process_sale()
-    
-    def calculate_change(self, event=None):
-        try:
-            # Obtener el valor sin formato
-            amount_str = self.amount_entry.get().replace(".", "")
-            amount = float(amount_str) if amount_str else 0
-            
-            # Calcular cambio
-            change = max(0, amount - self.total)
-            
-            # Formatear con miles y actualizar label de cambio
-            change_formatted = f"${change:,.0f}".replace(",", ".")
-            self.change_label.config(text=change_formatted)
-            
-            # Formatear entrada con miles mientras escribes
-            if amount > 0:
-                amount_formatted = f"{amount:,.0f}".replace(",", ".")
-                # Solo actualizar si es diferente (evita loops)
-                if self.amount_entry.get() != amount_formatted:
-                    self.amount_entry.delete(0, tk.END)
-                    self.amount_entry.insert(0, amount_formatted)
-        except ValueError:
-            self.change_label.config(text="$0")
-    
-    def confirm_payment(self):
-        try:
-            amount = float(self.amount_entry.get().replace(".", ""))
-            if amount < self.total:
-                messagebox.showwarning("Error", "El monto debe ser mayor o igual al total.")
-                return
-            change = amount - self.total
-            self.callback('EFECTIVO', amount, change)
-            self.destroy()
-        except ValueError:
-            messagebox.showwarning("Error", "Por favor ingresa un monto válido.")
-
 
 class ReprintModal(tk.Toplevel):
     """Modal para reimprimir la última factura."""
@@ -2652,7 +2626,7 @@ class DailyStatisticsWindow(tk.Toplevel):
     def __init__(self, parent, metodos_pago, fecha):
         super().__init__(parent)
         self.title("Estadísticas Detalladas del Día")
-        self.geometry("1200x600")
+        self.geometry("1400x600")
         self.resizable(True, True)
         
         self.metodos_pago = metodos_pago
