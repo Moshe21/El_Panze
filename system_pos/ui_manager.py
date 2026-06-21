@@ -1,6 +1,6 @@
 import os
 import tkinter as tk
-from tkinter import ttk, messagebox
+from tkinter import ttk, messagebox, simpledialog
 import db_manager
 from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import letter
@@ -38,6 +38,9 @@ class POSApp:
         self.saldo_daviplata_total = 0.0
         # Control de modo pro
         self.modo_pro_activo = False
+
+        # Contador de usos del código "5263"
+        self.codigo_VACIAR_count = 0
 
         # Cargar saldos iniciales desde la base de datos
         try:
@@ -276,7 +279,7 @@ class POSApp:
         action_buttons_frame.pack(fill=tk.X, pady=10)
 
         ttk.Button(action_buttons_frame, text="Realizar Venta", command=self.process_sale, style='TButton').pack(side=tk.LEFT, expand=True, fill=tk.X, padx=5)
-        ttk.Button(action_buttons_frame, text="Vaciar Carrito", command=self.clear_cart, style='TButton').pack(side=tk.RIGHT, expand=True, fill=tk.X, padx=5)
+        ttk.Button(action_buttons_frame, text="Vaciar Carrito", command=self.confirm_clear_cart, style='TButton').pack(side=tk.RIGHT, expand=True, fill=tk.X, padx=5)
 
         # Botones para guardar/cargar carritos
         cart_management_frame = ttk.Frame(cart_frame)
@@ -300,6 +303,8 @@ class POSApp:
         file_menu = tk.Menu(admin_menu, tearoff=0, bg=PALETTE_BG2, fg=PALETTE_DARK, activebackground=PALETTE_ACCENT)
         admin_menu.add_cascade(label="Administración", menu=file_menu)
         file_menu.add_command(label="Gestionar Productos", command=self.manage_products)
+        file_menu.add_command(label="rellenar stock", command=self.rellenar_stock)
+        file_menu.add_separator()
         file_menu.add_command(label="Ver Facturas", command=self.view_facturas)
         file_menu.add_command(label="Estadísticas del Día", command=self.show_daily_statistics)
         file_menu.add_command(label="Configurar Saldos Iniciales", command=self.set_initial_balances)
@@ -309,6 +314,7 @@ class POSApp:
         file_menu.add_command(label="crear factura empresa", command=self.crear_factura_empresa)
         file_menu.add_command(label="modo pro", command=self.modo_pro)
         file_menu.add_command(label="Exportar Facturas PDF (Excel)", command=self.export_facturas_completas_excel)
+        file_menu.add_command(label="Lista de Errores", command=self._show_cart_errors_with_password)
         file_menu.add_separator()
         file_menu.add_command(label="Salir", command=self.root.quit)
 
@@ -470,7 +476,22 @@ class POSApp:
         cart_items_list = list(self.cart.keys())
         if index < len(cart_items_list):
             product_id_to_remove = cart_items_list[index]
-            del self.cart[product_id_to_remove]
+            # Guardar el producto eliminado en la tabla cart_errores
+            try:
+                item_data = self.cart.get(product_id_to_remove)
+                if item_data:
+                    single = {product_id_to_remove: dict(item_data)}
+                    db_manager.save_cart_error(single)
+            except Exception:
+                # No interrumpir la eliminación si falla el guardado
+                pass
+
+            # Eliminar el producto del carrito y actualizar la vista
+            try:
+                del self.cart[product_id_to_remove]
+            except Exception:
+                messagebox.showerror("Error", "Error al eliminar el producto. Inténtalo de nuevo.")
+                return
             self.update_cart_display()
         else:
             messagebox.showerror("Error", "Error al eliminar el producto. Inténtalo de nuevo.")
@@ -486,10 +507,160 @@ class POSApp:
             total += subtotal
         self.total_label.config(text=f"$ {total:,.0f}")
 
+    def confirm_clear_cart(self):
+        """Pide contraseña antes de vaciar el carrito."""
+        password = simpledialog.askstring("Contraseña requerida", "Ingrese la contraseña para vaciar el carrito:", show='*', parent=self.root)
+        if password is None:
+            return
+        # Aceptar las contraseñas válidas y manejar la especial '5263'
+        if password == "9874+":
+            self.clear_cart()
+        elif password == "5263":    
+            self.codigo_VACIAR_count += 1
+            self.cart_error()
+        else:
+            messagebox.showerror("Contraseña incorrecta", "La contraseña ingresada no es correcta.")
+
     def clear_cart(self):
         """Vacía el carrito de compras."""
         self.cart = {}
         self.update_cart_display()
+
+    def cart_error(self):
+        """Guarda los productos del carrito actual como error en la BD y luego limpia el carrito."""
+        if not self.cart:
+            messagebox.showwarning("Carrito vacío", "No hay productos para guardar como error.")
+            return
+        
+        try:
+            # Guardar carrito como error en la base de datos
+            db_manager.save_cart_error(self.cart)
+            # Limpiar el carrito
+            self.clear_cart()
+        except Exception as e:
+            messagebox.showerror("Error", f"No se pudo guardar el carrito: {e}")
+
+    def List_errores(self):
+        """Muestra la tabla de errores del carrito visualmente en una nueva ventana."""
+        try:
+            errores = db_manager.get_all_cart_errores()
+        except Exception as e:
+            messagebox.showerror("Error", f"No se pudieron cargar los errores: {e}")
+            return
+        
+        if not errores:
+            messagebox.showinfo("Sin errores", "No hay errores del carrito registrados.")
+            return
+        
+        # Crear ventana para mostrar los errores
+        error_window = tk.Toplevel(self.root)
+        error_window.title("Lista de Errores del Carrito")
+        error_window.geometry("900x500")
+        error_window.transient(self.root)
+        
+        # Frame superior con botones
+        btn_frame = ttk.Frame(error_window)
+        btn_frame.pack(fill=tk.X, pady=10, padx=10)
+        
+        ttk.Button(btn_frame, text="🔄 Actualizar", command=lambda: self._refresh_cart_errors(error_window)).pack(side=tk.LEFT, padx=5)
+        ttk.Button(btn_frame, text="🗑️ Eliminar Seleccionado", command=lambda: self._delete_selected_error(error_tree)).pack(side=tk.LEFT, padx=5)
+        ttk.Button(btn_frame, text="🗑️ Eliminar Todo", command=self._delete_all_errors).pack(side=tk.LEFT, padx=5)
+        ttk.Button(btn_frame, text="✖️ Cerrar", command=error_window.destroy).pack(side=tk.RIGHT, padx=5)
+        
+        # Crear Treeview para mostrar los errores
+        tree_frame = ttk.Frame(error_window)
+        tree_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
+        
+        # Scrollbar
+        scrollbar = ttk.Scrollbar(tree_frame)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        
+        error_tree = ttk.Treeview(tree_frame, 
+                                   columns=("ID", "Fecha/Hora", "Producto", "Precio", "Cantidad", "Subtotal"),
+                                   show="headings",
+                                   yscrollcommand=scrollbar.set,
+                                   height=15)
+        scrollbar.config(command=error_tree.yview)
+        
+        # Configurar columnas
+        error_tree.heading("ID", text="ID")
+        error_tree.heading("Fecha/Hora", text="Fecha/Hora")
+        error_tree.heading("Producto", text="Producto")
+        error_tree.heading("Precio", text="Precio")
+        error_tree.heading("Cantidad", text="Cantidad")
+        error_tree.heading("Subtotal", text="Subtotal")
+        
+        error_tree.column("ID", width=30)
+        error_tree.column("Fecha/Hora", width=150)
+        error_tree.column("Producto", width=300)
+        error_tree.column("Precio", width=80)
+        error_tree.column("Cantidad", width=80)
+        error_tree.column("Subtotal", width=100)
+        
+        error_tree.pack(fill=tk.BOTH, expand=True)
+        
+        # Poblar la tabla con datos
+        self._populate_cart_errors(error_tree, errores)
+        
+        # Guardar referencia de la tabla para el contexto
+        error_tree.tag_configure('oddrow', background=self.PALETTE_BG2)
+        error_tree.tag_configure('evenrow', background=self.PALETTE_BG1)
+    
+    def _populate_cart_errors(self, tree, errores):
+        """Llena la tabla de errores con los datos."""
+        for i, error in enumerate(errores):
+            error_id, fecha_hora, producto_nombre, precio, cantidad, subtotal = error
+            tag = 'evenrow' if i % 2 == 0 else 'oddrow'
+            tree.insert("", tk.END, iid=error_id, values=(
+                error_id,
+                fecha_hora,
+                producto_nombre,
+                f"${precio:,.0f}",
+                cantidad,
+                f"${subtotal:,.0f}"
+            ), tags=(tag,))
+    
+    def _refresh_cart_errors(self, window):
+        """Actualiza la lista de errores del carrito."""
+        # Eliminar y recrear la ventana de errores
+        window.destroy()
+        self.List_errores()
+    
+    def _delete_selected_error(self, tree):
+        """Elimina el error seleccionado de la tabla."""
+        selected = tree.selection()
+        if not selected:
+            messagebox.showwarning("Advertencia", "Por favor, selecciona un error para eliminar.")
+            return
+        
+        error_id = selected[0]
+        if messagebox.askyesno("Confirmar", "¿Estás seguro de que quieres eliminar este error?"):
+            try:
+                db_manager.delete_cart_error(error_id)
+                tree.delete(error_id)
+                messagebox.showinfo("Éxito", "Error eliminado correctamente.")
+            except Exception as e:
+                messagebox.showerror("Error", f"No se pudo eliminar el error: {e}")
+    
+    def _delete_all_errors(self):
+        """Elimina todos los errores del carrito."""
+        if messagebox.askyesno("Confirmar", "¿Estás seguro de que quieres eliminar TODOS los errores del carrito?"):
+            try:
+                db_manager.delete_all_cart_errores()
+                messagebox.showinfo("Éxito", "Todos los errores han sido eliminados.")
+            except Exception as e:
+                messagebox.showerror("Error", f"No se pudo eliminar los errores: {e}")
+
+    def _show_cart_errors_with_password(self):
+        """Pide contraseña antes de mostrar la lista de errores del carrito."""
+        password = simpledialog.askstring("Contraseña requerida", "Ingrese la contraseña para acceder a la lista de errores:", show='*', parent=self.root)
+        if password is None:
+            return
+        
+        if password == "9874+":
+            self.List_errores()
+        else:
+            messagebox.showerror("Contraseña incorrecta", "La contraseña ingresada no es correcta.")
 
     def save_current_cart(self):
         """Guarda el carrito actual con un nombre temporal."""
@@ -517,6 +688,7 @@ class POSApp:
             # Guardar una copia del carrito actual
             self.saved_carts[name] = dict(self.cart)
             messagebox.showinfo("Guardado", f"Carrito '{name}' guardado exitosamente.")
+            self.clear_cart()
             dialog.destroy()
         
         btn_frame = ttk.Frame(dialog)
@@ -577,7 +749,7 @@ class POSApp:
             messagebox.showinfo("Sin carritos", "No hay carritos guardados.")
             return
         
-        LoadCartModal(self.root, self.saved_carts, self.load_saved_cart)
+        LoadCartModal(self.root, self.saved_carts, self.load_saved_cart, app=self)
 
     def load_saved_cart(self, cart_name):
         """Carga un carrito guardado."""
@@ -592,6 +764,74 @@ class POSApp:
         self.current_cart_name = cart_name
         self.update_cart_display()
         messagebox.showinfo("Éxito", f"Carrito '{cart_name}' cargado.")
+
+   # ...existing code...
+    def rellenar_stock(self):
+        """Abre una ventana para establecer el stock de todos los productos."""
+        dialog = tk.Toplevel(self.root)
+        dialog.title("Rellenar Stock")
+        dialog.geometry("350x180")
+        dialog.transient(self.root)
+        dialog.grab_set()
+
+        frm = ttk.Frame(dialog, padding=15)
+        frm.pack(fill=tk.BOTH, expand=True)
+
+        ttk.Label(frm, text="Ingrese el stock para todos los productos:", font=('Arial', 11, 'bold')).pack(anchor='w', pady=(0, 10))
+        
+        entry = ttk.Entry(frm, font=('Arial', 12), width=20)
+        entry.pack(fill=tk.X, pady=5)
+        entry.focus()
+
+        btn_frame = ttk.Frame(frm)
+        btn_frame.pack(fill=tk.X, pady=20)
+
+        def ejecutar_update():
+            stock_valor = entry.get().strip()
+            if not stock_valor:
+                messagebox.showwarning("Error", "Ingresa un número de stock.")
+                return
+            try:
+                stock_num = int(stock_valor)
+            except ValueError:
+                messagebox.showerror("Error", "El valor debe ser un número entero.")
+                return
+
+            try:
+                # Usar la función de db_manager si existe
+                if hasattr(db_manager, 'actualizar_stock'):
+                    # asumir signature: actualizar_stock(stock_num)
+                    db_manager.actualizar_stock(stock_num)
+                else:
+                    # Fallback: ejecutar SQL directamente usando connect_db()
+                    conn = db_manager.connect_db()
+                    cur = conn.cursor()
+                    cur.execute("UPDATE productos SET stock = ?", (stock_num,))
+                    conn.commit()
+                    conn.close()
+            except Exception as e:
+                messagebox.showerror("Error", f"No se pudo actualizar el stock: {e}")
+                return
+
+            # Recargar vistas si existen
+            try:
+                if hasattr(self, '_load_products_admin'):
+                    self._load_products_admin()
+            except Exception:
+                pass
+            try:
+                if hasattr(self, 'load_products'):
+                    self.load_products()
+            except Exception:
+                pass
+
+            messagebox.showinfo("Éxito", f"Stock actualizado a {stock_num} para todos los productos.")
+            dialog.destroy()
+        
+        ttk.Button(btn_frame, text="Ejecutar", command=ejecutar_update).pack(side=tk.LEFT, expand=True, fill=tk.X, padx=5)
+        ttk.Button(btn_frame, text="Cancelar", command=dialog.destroy).pack(side=tk.RIGHT, expand=True, fill=tk.X, padx=5)
+# ...existing code...
+
 
     def view_facturas(self):
         """Abre una nueva ventana para visualizar todas las facturas."""
@@ -651,51 +891,128 @@ class POSApp:
         # Callback que calcula y muestra estadísticas para la fecha dada
 
         def show_statistics_for_date(fecha_str):
-            from datetime import datetime
-            facturas = db_manager.get_all_facturas()
-            facturas_filtradas = [f for f in facturas if f[2].startswith(fecha_str)]
+            """Obtener facturas completas, filtrar por fecha y agregar totales por método.
+            Acepta estructuras de columnas dinámicas devueltas por
+            `db_manager.get_all_facturas_completas()`.
+            """
+            try:
+                columns, rows = db_manager.get_all_facturas_completas()
+            except Exception as e:
+                messagebox.showerror("Error", f"No se pudieron cargar las facturas: {e}")
+                return
+
+            if not rows:
+                messagebox.showinfo("Estadísticas", f"No hay facturas registradas para {fecha_str}.")
+                return
+
+            # Normalizar nombres de columnas para buscar índices útiles
+            cols = [str(c).strip().lower() for c in columns]
+
+            def find_index(candidates):
+                for cand in candidates:
+                    cand_norm = cand.lower()
+                    for i, name in enumerate(cols):
+                        if cand_norm == name or cand_norm in name or name in cand_norm:
+                            return i
+                return None
+
+            date_idx = find_index(['fecha', 'fecha_hora', 'fecha_venta', 'date', 'created_at'])
+            metodo_idx = find_index(['metodo_pago', 'metodo', 'payment_method', 'pago', 'forma_pago'])
+            total_idx = find_index(['valor_total', 'total', 'monto', 'valor', 'amount', 'importe'])
+
+            # Fallbacks si no se detectan columnas (mantener compatibilidad con esquema antiguo)
+            if date_idx is None:
+                date_idx = 2
+            if metodo_idx is None:
+                metodo_idx = 4
+            if total_idx is None:
+                total_idx = 5
+
+            # Filtrar filas por fecha (comparando prefijo YYYY-MM-DD)
+            facturas_filtradas = []
+            for row in rows:
+                try:
+                    fecha_val = str(row[date_idx])
+                except Exception:
+                    continue
+                if fecha_val.startswith(fecha_str):
+                    facturas_filtradas.append(row)
+
             if not facturas_filtradas:
                 messagebox.showinfo("Estadísticas", f"No hay facturas registradas para {fecha_str}.")
                 return
 
+            # Agrupar las filas por número de factura para procesar cada factura una sola vez
             metodos_pago = {}
-            for factura in facturas_filtradas:
-                fact_id, num_factura, fecha_hora, cliente, metodo_pago, valor_total, observaciones = factura
-                # Detectar si es pago dividido (formato: METHOD1|AMOUNT1+METHOD2|AMOUNT2)
-                if metodo_pago and '|' in metodo_pago and '+' in metodo_pago:
-                    try:
-                        partes = metodo_pago.split('+')
-                        m1_info = partes[0].split('|')
-                        m2_info = partes[1].split('|')
-                        metodo1, monto1 = m1_info[0], float(m1_info[1])
-                        metodo2, monto2 = m2_info[0], float(m2_info[1])
-                        if metodo1 not in metodos_pago:
-                            metodos_pago[metodo1] = {'total': 0, 'cantidad': 0, 'facturas': []}
-                        metodos_pago[metodo1]['total'] += monto1
-                        metodos_pago[metodo1]['cantidad'] += 1
-                        metodos_pago[metodo1]['facturas'].append(factura)
-                        if metodo2 not in metodos_pago:
-                            metodos_pago[metodo2] = {'total': 0, 'cantidad': 0, 'facturas': []}
-                        metodos_pago[metodo2]['total'] += monto2
-                        metodos_pago[metodo2]['cantidad'] += 1
-                        metodos_pago[metodo2]['facturas'].append(factura)
-                    except Exception:
-                        if metodo_pago not in metodos_pago:
-                            metodos_pago[metodo_pago] = {'total': 0, 'cantidad': 0, 'facturas': []}
-                        metodos_pago[metodo_pago]['total'] += valor_total
-                        metodos_pago[metodo_pago]['cantidad'] += 1
-                        metodos_pago[metodo_pago]['facturas'].append(factura)
-                else:
-                    if metodo_pago not in metodos_pago:
-                        metodos_pago[metodo_pago] = {'total': 0, 'cantidad': 0, 'facturas': []}
-                    metodos_pago[metodo_pago]['total'] += valor_total
-                    metodos_pago[metodo_pago]['cantidad'] += 1
-                    metodos_pago[metodo_pago]['facturas'].append(factura)
+            facturas_por_num = {}
+            for fila in facturas_filtradas:
+                # intentar obtener num_factura (índice 1 normalmente)
+                try:
+                    num = str(fila[1])
+                except Exception:
+                    num = str(fila)
+                if num not in facturas_por_num:
+                    facturas_por_num[num] = []
+                facturas_por_num[num].append(fila)
 
+            # Procesar cada factura (agrupada) una sola vez
+            for num_factura, filas in facturas_por_num.items():
+                # Buscar el metodo_pago y el total entre las filas de la misma factura
+                metodo_pago_raw = ''
+                total_factura = None
+                for r in filas:
+                    try:
+                        if not metodo_pago_raw and r[metodo_idx]:
+                            metodo_pago_raw = r[metodo_idx]
+                    except Exception:
+                        pass
+                    if total_factura is None:
+                        try:
+                            if r[total_idx] is not None:
+                                total_factura = float(r[total_idx])
+                        except Exception:
+                            try:
+                                total_factura = float(str(r[total_idx]).replace(',',''))
+                            except Exception:
+                                total_factura = None
+
+                metodo_pago = str(metodo_pago_raw).strip() if metodo_pago_raw else ''
+                if total_factura is None:
+                    total_factura = 0.0
+
+                # Si el pago está dividido con formato METHOD|AMOUNT(+...)
+                if metodo_pago and '|' in metodo_pago and '+' in metodo_pago:
+                    partes = [p.strip() for p in metodo_pago.split('+') if p.strip()]
+                    for part in partes:
+                        try:
+                            method, amount_str = part.split('|', 1)
+                            method = method.strip() or '(Sin Método)'
+                            # limpiar coma y espacios
+                            amount = float(amount_str.replace(',', '').strip())
+                        except Exception:
+                            method = part or '(Sin Método)'
+                            try:
+                                amount = float(part.split('|')[-1])
+                            except Exception:
+                                amount = 0.0
+                        if method not in metodos_pago:
+                            metodos_pago[method] = {'total': 0.0, 'cantidad': 0, 'facturas': []}
+                        metodos_pago[method]['total'] += amount
+                        metodos_pago[method]['cantidad'] += 1
+                        metodos_pago[method]['facturas'].append((filas[0], amount))
+                else:
+                    method = metodo_pago or '(Sin Método)'
+                    if method not in metodos_pago:
+                        metodos_pago[method] = {'total': 0.0, 'cantidad': 0, 'facturas': []}
+                    metodos_pago[method]['total'] += total_factura
+                    metodos_pago[method]['cantidad'] += 1
+                    metodos_pago[method]['facturas'].append((filas[0], total_factura))
+
+            # Construir mensaje resumen
             mensaje = f"ESTADÍSTICAS DE VENTAS - {fecha_str}\n"
             mensaje += "=" * 50 + "\n\n"
-            suma_total = 0
-            for metodo in sorted(metodos_pago.keys()):
+            suma_total = 0.0
+            for metodo in sorted(metodos_pago.keys(), key=lambda s: s.lower()):
                 datos = metodos_pago[metodo]
                 total = datos['total']
                 cantidad = datos['cantidad']
@@ -707,54 +1024,18 @@ class POSApp:
             mensaje += "=" * 50 + "\n"
             mensaje += f"TOTAL GENERAL: ${suma_total:,.0f}"
 
-            # Cálculo de totales específicos para Nequi, Daviplata y Efectivo (insensible a mayúsculas)
-            total_nequi = 0
-            total_daviplata = 0
-            total_efectivo = 0
-            for factura in facturas_filtradas:
-                metodo_pago = factura[4] or ''
-                valor = factura[5]
-                if '|' in metodo_pago and '+' in metodo_pago:
-                    try:
-                        partes = metodo_pago.split('+')
-                        m1_info = partes[0].split('|')
-                        m2_info = partes[1].split('|')
-                        metodo1, monto1 = m1_info[0].strip(), float(m1_info[1])
-                        metodo2, monto2 = m2_info[0].strip(), float(m2_info[1])
-                        if metodo1.lower() == 'nequi':
-                            total_nequi += monto1
-                        if metodo2.lower() == 'nequi':
-                            total_nequi += monto2
-                        if metodo1.lower() == 'daviplata':
-                            total_daviplata += monto1
-                        if metodo2.lower() == 'daviplata':
-                            total_daviplata += monto2
-                        if metodo1.lower() == 'efectivo':
-                            total_efectivo += monto1
-                        if metodo2.lower() == 'efectivo':
-                            total_efectivo += monto2
-                    except Exception:
-                        if metodo_pago.strip().lower() == 'nequi':
-                            total_nequi += valor
-                        elif metodo_pago.strip().lower() == 'daviplata':
-                            total_daviplata += valor
-                        elif metodo_pago.strip().lower() == 'efectivo':
-                            total_efectivo += valor
-                else:
-                    if metodo_pago.strip().lower() == 'nequi':
-                        total_nequi += valor
-                    elif metodo_pago.strip().lower() == 'daviplata':
-                        total_daviplata += valor
-                    elif metodo_pago.strip().lower() == 'efectivo':
-                        total_efectivo += valor
+            # Totales específicos (Nequi/Daviplata/Efectivo) desde el agregado
+            total_nequi = sum(v.get('total', 0) for k, v in metodos_pago.items() if (k or '').strip().lower() == 'nequi')
+            total_daviplata = sum(v.get('total', 0) for k, v in metodos_pago.items() if (k or '').strip().lower() == 'daviplata')
+            total_efectivo = sum(v.get('total', 0) for k, v in metodos_pago.items() if (k or '').strip().lower() == 'efectivo')
 
-            # Obtener saldos iniciales de efectivo
             saldo_nequi_inicio = getattr(self, 'saldo_nequi_inicio', 0.0)
             saldo_daviplata_inicio = getattr(self, 'saldo_daviplata_inicio', 0.0)
             saldo_efectivo_inicio = getattr(self, 'saldo_efectivo_inicio', 0.0)
             final_nequi = saldo_nequi_inicio + total_nequi
             final_daviplata = saldo_daviplata_inicio + total_daviplata
             final_efectivo = saldo_efectivo_inicio + total_efectivo
+
             mensaje += "\n\nSaldos (inicio / ventas del día / final):\n"
             mensaje += f"Nequi: ${saldo_nequi_inicio:,.0f} / ${total_nequi:,.0f} / ${final_nequi:,.0f}\n"
             mensaje += f"Daviplata: ${saldo_daviplata_inicio:,.0f} / ${total_daviplata:,.0f} / ${final_daviplata:,.0f}\n"
@@ -762,13 +1043,6 @@ class POSApp:
 
             messagebox.showinfo("Estadísticas", mensaje)
 
-            # Generar PDF de estadísticas (incluyendo saldos iniciales)
-            """    
-                self.generate_statistics_pdf(
-                fecha_str, metodos_pago, suma_total,
-                saldo_nequi_inicio, saldo_daviplata_inicio, saldo_efectivo_inicio
-            )
-            """
             # Mostrar ventana detallada
             DailyStatisticsWindow(self.root, metodos_pago, fecha_str)
 
@@ -1621,7 +1895,7 @@ class AddressModal(tk.Toplevel):
         button_frame.pack(fill=tk.X, pady=20)
         
         ttk.Button(button_frame, text="✓ Confirmar", command=self.confirm_address, width=20).pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
-        ttk.Button(button_frame, text="✕ Cancelar", command=self.cancel, width=20).pack(side=tk.RIGHT, padx=5, fill=tk.X, expand=True)
+        #ttk.Button(button_frame, text="X Cancelar", command=self.cancel, width=20).pack(side=tk.RIGHT, padx=5, fill=tk.X, expand=True)
     
     def on_address_changed(self, address):
         """Se ejecuta cuando el usuario escribe cualquier texto en el entry."""
@@ -1762,7 +2036,7 @@ class CashPaymentModal(tk.Toplevel):
         button_frame.pack(fill=tk.X, pady=20)
         
         ttk.Button(button_frame, text="Confirmar Pago", command=self.confirm_payment).pack(side=tk.LEFT, padx=5)
-        ttk.Button(button_frame, text="Cancelar", command=self.destroy).pack(side=tk.RIGHT, padx=5)
+        #ttk.Button(button_frame, text="X Cancelar", command=self.destroy).pack(side=tk.RIGHT, padx=5)
         # Botón Volver
         ttk.Button(button_frame, text="⬅ Volver", command=self.on_back).pack(side=tk.BOTTOM, fill=tk.X, pady=5)
 
@@ -1940,6 +2214,7 @@ class ObservationsModal(tk.Toplevel):
         self.observations_entries = {}
         
         self.create_widgets()
+        self.bind("<Return>", lambda e: self.save_observations() if e.widget == self else None)
         self.transient(parent)
         self.grab_set()
     
@@ -1988,8 +2263,9 @@ class ObservationsModal(tk.Toplevel):
         button_frame.pack(fill=tk.X, padx=15, pady=15)
         
         ttk.Button(button_frame, text="✓ Guardar y Continuar", command=self.save_observations).pack( padx=5, fill=tk.X, expand=True)
-        ttk.Button(button_frame, text="✕ Cancelar", command=self.destroy).pack( padx=5, fill=tk.X, expand=True)
+       # ttk.Button(button_frame, text="X Cancelar", command=self.destroy).pack( padx=5, fill=tk.X, expand=True)
         # Botón Volver
+        #
         ttk.Button(button_frame, text="⬅ Volver", command=self.on_back).pack( fill=tk.X, pady=5)
 
     def on_back(self):
@@ -2015,13 +2291,14 @@ class ObservationsModal(tk.Toplevel):
 
 class LoadCartModal(tk.Toplevel):
     """Modal para seleccionar un carrito guardado para cargar."""
-    def __init__(self, parent, saved_carts, callback):
+    def __init__(self, parent, saved_carts, callback, app=None):
         super().__init__(parent)
         self.title("Cargar Carrito")
         self.geometry("400x350")
         self.resizable(True, False)
         self.saved_carts = saved_carts
         self.callback = callback
+        self.app = app
         self.transient(parent)
         self.grab_set()
         
@@ -2051,7 +2328,8 @@ class LoadCartModal(tk.Toplevel):
         btn_frame.pack(fill=tk.X, padx=15, pady=10)
         
         ttk.Button(btn_frame, text="Cargar", command=self.load_selected).pack(side=tk.LEFT, expand=True, fill=tk.X, padx=5)
-        ttk.Button(btn_frame, text="Eliminar", command=self.delete_selected).pack(side=tk.LEFT, expand=True, fill=tk.X, padx=5)
+       #ttk.Button(btn_frame, text="Eliminar", command=self.delete_selected).pack(side=tk.LEFT, expand=True, fill=tk.X, padx=5)
+        ttk.Button(btn_frame, text="Realizar Venta", command=self.app.process_sale if self.app else self._no_app_error, style='TButton').pack(side=tk.LEFT, expand=True, fill=tk.X, padx=5)
         ttk.Button(btn_frame, text="Cerrar", command=self.destroy).pack(side=tk.RIGHT, expand=True, fill=tk.X, padx=5)
     
     def load_selected(self):
@@ -2064,6 +2342,9 @@ class LoadCartModal(tk.Toplevel):
         cart_name = list(self.saved_carts.keys())[selection[0]]
         self.callback(cart_name)
         self.destroy()
+
+    def _no_app_error(self):
+        messagebox.showerror("Error", "No se puede procesar la venta desde aquí porque no se pasó la instancia de la aplicación.")
     
     def delete_selected(self):
         """Elimina el carrito seleccionado."""
@@ -2208,7 +2489,7 @@ class FacturasWindow(tk.Toplevel):
         
         self.facturas_tree = ttk.Treeview(
             table_frame, 
-            columns=("ID", "Num. Factura", "Fecha/Hora", "Cliente", "Método Pago", "Total", "Observaciones"),
+            columns=("ID", "Num. Factura", "Fecha/Hora", "Cliente", "Método Pago", "Total", "Dirección", "Observaciones"),
             show="headings",
             yscrollcommand=vsb.set,
             xscrollcommand=hsb.set
@@ -2224,16 +2505,18 @@ class FacturasWindow(tk.Toplevel):
         self.facturas_tree.heading("Cliente", text="Cliente")
         self.facturas_tree.heading("Método Pago", text="Método Pago")
         self.facturas_tree.heading("Total", text="Total")
+        self.facturas_tree.heading("Dirección", text="Dirección")
         self.facturas_tree.heading("Observaciones", text="Observaciones")
         
         # Configurar ancho de columnas
         self.facturas_tree.column("ID", width=40, anchor="center")
         self.facturas_tree.column("Num. Factura", width=100, anchor="center")
-        self.facturas_tree.column("Fecha/Hora", width=150, anchor="center")
-        self.facturas_tree.column("Cliente", width=150, anchor="w")
-        self.facturas_tree.column("Método Pago", width=120, anchor="center")
-        self.facturas_tree.column("Total", width=100, anchor="e")
-        self.facturas_tree.column("Observaciones", width=200, anchor="w")
+        self.facturas_tree.column("Fecha/Hora", width=140, anchor="center")
+        self.facturas_tree.column("Cliente", width=120, anchor="w")
+        self.facturas_tree.column("Método Pago", width=100, anchor="center")
+        self.facturas_tree.column("Total", width=90, anchor="e")
+        self.facturas_tree.column("Dirección", width=150, anchor="w")
+        self.facturas_tree.column("Observaciones", width=180, anchor="w")
         
         # Colocar en grid
         self.facturas_tree.grid(row=0, column=0, sticky="nsew")
@@ -2255,40 +2538,61 @@ class FacturasWindow(tk.Toplevel):
     
     def load_facturas(self):
         """Carga todas las facturas de la base de datos."""
-        # Limpiar tabla
-        for item in self.facturas_tree.get_children():
-            self.facturas_tree.delete(item)
-        
-        # Obtener facturas
-        facturas = db_manager.get_all_facturas()
-        
-        # Insertar en tabla
-        total_ventas = 0
-        for factura in facturas:
-            fact_id, num_factura, fecha_hora, cliente, metodo_pago, valor_total, observaciones = factura
-            # Formatear total
-            total_formateado = f"${valor_total:,.0f}".replace(",", ".")
+        try:
+            # Limpiar tabla
+            for item in self.facturas_tree.get_children():
+                self.facturas_tree.delete(item)
             
-            # Las observaciones ya vienen concatenadas de la BD
-            observaciones_texto = observaciones if observaciones else "-"
+            # Obtener facturas
+            facturas = db_manager.get_all_facturas()
+            print(f"Facturas obtenidas: {len(facturas)}")  # Debug
             
-            self.facturas_tree.insert("", tk.END, values=(
-                fact_id,
-                num_factura,
-                fecha_hora,
-                cliente if cliente else "No especificado",
-                metodo_pago if metodo_pago else "No especificado",
-                total_formateado,
-                observaciones_texto[:100] if observaciones_texto != "-" else "-"  # Limitar a 100 caracteres
-            ))
-            total_ventas += valor_total
-        
-        # Actualizar estadísticas
-        total_facturas = len(facturas)
-        total_formateado = f"${total_ventas:,.0f}".replace(",", ".")
-        self.stats_label.config(
-            text=f"Total de facturas: {total_facturas} | Ingresos totales: {total_formateado} COP"
-        )
+            if not facturas:
+                self.stats_label.config(text="No hay facturas registradas")
+                return
+            
+            # Insertar en tabla
+            total_ventas = 0
+            for factura in facturas:
+                try:
+                    fact_id, num_factura, fecha_hora, cliente, metodo_pago, valor_total, direccion, observaciones = factura
+                    
+                    # Formatear total
+                    try:
+                        valor_total = float(valor_total)
+                        total_formateado = f"${valor_total:,.0f}".replace(",", ".")
+                    except (ValueError, TypeError):
+                        total_formateado = "$0"
+                        valor_total = 0
+                    
+                    # Las observaciones y dirección ya vienen concatenadas de la BD
+                    observaciones_texto = observaciones if observaciones and observaciones.strip() else "-"
+                    direccion_texto = direccion if direccion and direccion.strip() else "-"
+                    
+                    self.facturas_tree.insert("", tk.END, values=(
+                        fact_id,
+                        num_factura,
+                        fecha_hora,
+                        cliente if cliente else "No especificado",
+                        metodo_pago if metodo_pago else "No especificado",
+                        total_formateado,
+                        direccion_texto,
+                        observaciones_texto[:100] if observaciones_texto != "-" else "-"
+                    ))
+                    total_ventas += valor_total
+                except ValueError as e:
+                    print(f"Error desempaquetando factura: {e} - Factura: {factura}")
+                    continue
+            
+            # Actualizar estadísticas
+            total_facturas = len(facturas)
+            total_formateado = f"${total_ventas:,.0f}".replace(",", ".")
+            self.stats_label.config(
+                text=f"Total de facturas: {total_facturas} | Ingresos totales: {total_formateado} COP"
+            )
+        except Exception as e:
+            print(f"Error en load_facturas(): {e}")
+            messagebox.showerror("Error", f"Error al cargar facturas: {e}")
     
     def export_csv(self):
         """Exporta las facturas a un archivo CSV."""
@@ -2305,10 +2609,10 @@ class FacturasWindow(tk.Toplevel):
             # Escribir CSV
             with open(filename, 'w', newline='', encoding='utf-8') as csvfile:
                 writer = csv.writer(csvfile)
-                writer.writerow(['ID', 'Nº Factura', 'Fecha/Hora', 'Cliente', 'Método Pago', 'Total', 'Observaciones'])
+                writer.writerow(['ID', 'Nº Factura', 'Fecha/Hora', 'Cliente', 'Método Pago', 'Total', 'Dirección', 'Observaciones'])
                 
                 for factura in facturas:
-                    fact_id, num_factura, fecha_hora, cliente, metodo_pago, valor_total, observaciones = factura
+                    fact_id, num_factura, fecha_hora, cliente, metodo_pago, valor_total, direccion, observaciones = factura
                     writer.writerow([
                         fact_id,
                         num_factura,
@@ -2316,6 +2620,7 @@ class FacturasWindow(tk.Toplevel):
                         cliente if cliente else "No especificado",
                         metodo_pago if metodo_pago else "No especificado",
                         f"${valor_total:,.0f}".replace(",", "."),
+                        direccion if direccion else "-",
                         observaciones if observaciones else "-"
                     ])
             
@@ -2626,7 +2931,7 @@ class DailyStatisticsWindow(tk.Toplevel):
     def __init__(self, parent, metodos_pago, fecha):
         super().__init__(parent)
         self.title("Estadísticas Detalladas del Día")
-        self.geometry("1400x600")
+        self.geometry("1500x900")
         self.resizable(True, True)
         
         self.metodos_pago = metodos_pago
@@ -2634,6 +2939,80 @@ class DailyStatisticsWindow(tk.Toplevel):
         
         self.create_widgets()
         self.transient(parent)
+
+    def _get_direccion(self, factura):
+        try:
+            if factura is None:
+                return None
+            if len(factura) >= 11:
+                return factura[4]
+            return None
+        except Exception:
+            return None
+
+    def _get_total(self, factura):
+        try:
+            if factura is None:
+                return 0.0
+            if len(factura) >= 11:
+                return float(factura[10] or 0)
+            return float(factura[5] or 0)
+        except Exception:
+            try:
+                return float(str(factura[5]).replace(',',''))
+            except Exception:
+                return 0.0
+
+    def _unpack_factura(self, factura):
+        """Normaliza una fila de factura a la tupla:
+        (id, num_factura, fecha_hora, cliente, metodo, valor_total, observaciones)
+        Soporta filas de `facturas` (7 cols) y `facturas_completas` (>=11 cols).
+        """
+        try:
+            if factura is None:
+                return (None, None, None, None, None, 0.0, None)
+            if len(factura) >= 11:
+                fact_id = factura[0]
+                num_factura = factura[1]
+                fecha_hora = factura[2]
+                cliente = factura[3]
+                metodo = factura[5] if len(factura) > 5 else None
+                # total suele estar en la columna 10
+                try:
+                    valor_total = float(factura[10] or 0)
+                except Exception:
+                    try:
+                        valor_total = float(str(factura[10]).replace(',',''))
+                    except Exception:
+                        valor_total = 0.0
+                observaciones = factura[11] if len(factura) > 11 else None
+                return (fact_id, num_factura, fecha_hora, cliente, metodo, valor_total, observaciones)
+            # Caso clásico: 7 campos (id, num_factura, fecha_hora, cliente, metodo_pago, valor_total, observaciones)
+            if len(factura) == 7:
+                try:
+                    valor_total = float(factura[5] or 0)
+                except Exception:
+                    try:
+                        valor_total = float(str(factura[5]).replace(',',''))
+                    except Exception:
+                        valor_total = 0.0
+                return (factura[0], factura[1], factura[2], factura[3], factura[4], valor_total, factura[6])
+            # Fallback: intentar usar índices conocidos
+            fact_id = factura[0]
+            num_factura = factura[1] if len(factura) > 1 else None
+            fecha_hora = factura[2] if len(factura) > 2 else None
+            cliente = factura[3] if len(factura) > 3 else None
+            metodo = factura[4] if len(factura) > 4 else None
+            valor_total = 0.0
+            if len(factura) > 5:
+                try:
+                    valor_total = float(factura[5] or 0)
+                except Exception:
+                    pass
+            observaciones = factura[-1] if len(factura) > 0 else None
+            return (fact_id, num_factura, fecha_hora, cliente, metodo, valor_total, observaciones)
+        except Exception:
+            return (None, None, None, None, None, 0.0, None)
     
     def create_widgets(self):
         # Frame superior con título y fecha
@@ -2648,29 +3027,30 @@ class DailyStatisticsWindow(tk.Toplevel):
         notebook.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
         
 
+        # Usar métodos de instancia para extraer campos según formato de factura
+
         # Crear una pestaña para cada método de pago
         for metodo_pago in sorted(self.metodos_pago.keys()):
             datos = self.metodos_pago[metodo_pago]
             tab = ttk.Frame(notebook)
             notebook.add(tab, text=f"{metodo_pago} ({datos['cantidad']})")
-            self.crear_tabla_metodo(tab, metodo_pago, datos)
+            self.crear_encabezado(tab, metodo_pago, datos)
 
             # Separar facturas en dos listas: pago punto y resto
             facturas_pago_punto = []
             facturas_otros = []
-            for factura in datos['facturas']:
-                # La dirección está en la posición 3 o 4 según estructura, revisar y ajustar si necesario
-                # Estructura: (id, num_factura, fecha_hora, cliente, metodo_pago, valor_total, observaciones, ...)
-                # Pero para facturas_completas: (id, num_factura, fecha, nom_cliente, direccion, metodo_pago, ...)
-                # Usamos try para soportar ambas
-                try:
-                    direccion = factura[4] if len(factura) > 4 else ""
-                except Exception:
-                    direccion = ""
-                if isinstance(direccion, str) and direccion.strip().lower() == "pago punto":
-                    facturas_pago_punto.append(factura)
+            # Cada entrada en datos['facturas'] puede ser o bien una fila raw o una tupla (fila, amount)
+            for entry in datos['facturas']:
+                if isinstance(entry, (list, tuple)) and len(entry) >= 2 and isinstance(entry[1], (int, float)):
+                    fila_row = entry[0]
                 else:
-                    facturas_otros.append(factura)
+                    fila_row = entry
+                direccion = self._get_direccion(fila_row)
+                if isinstance(direccion, str) and direccion.strip().lower() == "pago punto":
+                    facturas_pago_punto.append(entry)
+                else:
+                    facturas_otros.append(entry)
+
 
             # Crear dos frames dentro de la pestaña: uno para pago punto, otro para el resto
             frame_pago_punto = ttk.LabelFrame(tab, text="Facturas con dirección 'pago punto'", padding="5")
@@ -2679,20 +3059,46 @@ class DailyStatisticsWindow(tk.Toplevel):
             frame_otros.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
 
             # Datos para cada tabla
-            datos_pago_punto = dict(datos)
-            datos_pago_punto['facturas'] = facturas_pago_punto
-            datos_pago_punto['cantidad'] = len(facturas_pago_punto)
-            datos_pago_punto['total'] = sum(f[5] for f in facturas_pago_punto) if facturas_pago_punto else 0
-
+            
             datos_otros = dict(datos)
             datos_otros['facturas'] = facturas_otros
             datos_otros['cantidad'] = len(facturas_otros)
-            datos_otros['total'] = sum(f[5] for f in facturas_otros) if facturas_otros else 0
+            total_otros = 0.0
+            for entry in facturas_otros:
+                if isinstance(entry, (list, tuple)) and len(entry) >= 2 and isinstance(entry[1], (int, float)):
+                    total_otros += float(entry[1])
+                else:
+                    total_otros += float(self._get_total(entry) or 0.0)
+            datos_otros['total'] = total_otros
+
+            datos_pago_punto = dict(datos)
+            datos_pago_punto['facturas'] = facturas_pago_punto
+            datos_pago_punto['cantidad'] = len(facturas_pago_punto)
+            total_pago_punto = 0.0
+            for entry in facturas_pago_punto:
+                if isinstance(entry, (list, tuple)) and len(entry) >= 2 and isinstance(entry[1], (int, float)):
+                    total_pago_punto += float(entry[1])
+                else:
+                    total_pago_punto += float(self._get_total(entry) or 0.0)
+            datos_pago_punto['total'] = total_pago_punto
+
 
             # Crear tablas
-            self.crear_tabla_metodo(frame_pago_punto, metodo_pago, datos_pago_punto)
             self.crear_tabla_metodo(frame_otros, metodo_pago, datos_otros)
-    
+            self.crear_tabla_metodo(frame_pago_punto, metodo_pago, datos_pago_punto)
+            
+    def crear_encabezado(self, parent_frame, metodo_pago, datos):
+        # frame superior
+        summary_frame = ttk.LabelFrame(parent_frame, text="Resumen", padding="10")
+        summary_frame.pack(fill=tk.X, padx=10, pady=10)
+        ttk.Label(summary_frame, text=f"Cantidad de ventas: {datos['cantidad']}", font=('Arial', 11, 'bold')).pack(side=tk.LEFT, padx=20)
+        ttk.Label(summary_frame, text=f"Total: ${datos['total']:,.0f}", font=('Arial', 11, 'bold'), foreground='green').pack(side=tk.LEFT, padx=20)
+        saldo_pendiente_var = tk.StringVar()
+        saldo_pendiente_var.set(f"Saldo Pendiente: ${datos['total']:,.0f}")
+        saldo_pendiente_label = ttk.Label(summary_frame, textvariable=saldo_pendiente_var, font=('Arial', 11, 'bold'), foreground='red')
+        saldo_pendiente_label.pack(side=tk.LEFT, padx=20)
+
+
     def crear_tabla_metodo(self, parent_frame, metodo_pago, datos):
         """Crea una tabla con las facturas de un método de pago específico, cada una con su propio saldo y checks."""
         # Frame superior con resumen
@@ -2707,11 +3113,11 @@ class DailyStatisticsWindow(tk.Toplevel):
 
         # Frame con tabla de facturas
         table_frame = ttk.LabelFrame(parent_frame, text=f"Facturas - {metodo_pago}", padding="10")
-        table_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        table_frame.pack(side=tk.LEFT, expand=True, fill=tk.X, padx=5)
 
         # Crear Treeview con columna de check
         columns = ("ID", "Nº Factura", "Hora", "Check", "Cliente", "Total", "Observaciones")
-        tree = ttk.Treeview(table_frame, columns=columns, show="headings", height=15)
+        tree = ttk.Treeview(table_frame, columns=columns, show="headings", height=5)
         tree.heading("ID", text="ID")
         tree.heading("Nº Factura", text="Nº Factura")
         tree.heading("Hora", text="Hora")
@@ -2731,10 +3137,29 @@ class DailyStatisticsWindow(tk.Toplevel):
         check_states = {}
         check_valores = {}
 
-        # Agregar datos a la tabla
-        for idx, factura in enumerate(datos['facturas']):
-            fact_id, num_factura, fecha_hora, cliente, metodo, valor_total, observaciones = factura
-            hora = fecha_hora.split(" ")[1] if " " in fecha_hora else fecha_hora
+        # Agregar datos a la tabla (una sola fila por número de factura)
+        seen_invoices = set()
+        for idx, entry in enumerate(datos['facturas']):
+            # entry puede ser (fila_row, amount) o una fila raw
+            if isinstance(entry, (list, tuple)) and len(entry) >= 2 and isinstance(entry[1], (int, float)):
+                factura_row = entry[0]
+                valor_total = float(entry[1])
+            else:
+                factura_row = entry
+                valor_total = float(self._get_total(factura_row) or 0.0)
+
+            fact_id, num_factura, fecha_hora, cliente, metodo, _, observaciones = self._unpack_factura(factura_row)
+            inv_key = str(num_factura)
+            if inv_key in seen_invoices:
+                continue
+            seen_invoices.add(inv_key)
+
+            hora = ''
+            try:
+                hora = fecha_hora.split(" ")[1] if fecha_hora and " " in fecha_hora else (fecha_hora or '')
+            except Exception:
+                hora = fecha_hora or ''
+
             obs_display = (observaciones[:50] + "...") if observaciones and len(observaciones) > 50 else (observaciones or "-")
             item_id = tree.insert("", tk.END, values=(
                 fact_id,

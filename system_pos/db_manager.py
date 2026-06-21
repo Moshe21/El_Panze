@@ -147,6 +147,18 @@ def create_tables():
     except Exception:
         pass
     cursor.execute("INSERT OR IGNORE INTO config_saldos (id, nequi_inicial, daviplata_inicial, efectivo_inicial) VALUES (1, 0, 0, 0)")
+    
+    # Tabla para guardar errores del carrito
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS cart_errores (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            fecha_hora TEXT NOT NULL,
+            producto_nombre TEXT NOT NULL,
+            precio REAL NOT NULL,
+            cantidad INTEGER NOT NULL,
+            subtotal REAL NOT NULL
+        )
+    ''')
     conn.commit()
     conn.close()
 
@@ -332,37 +344,76 @@ def count_products():
     return count
 
 def get_all_facturas():
-    """Obtiene todas las facturas registradas con sus observaciones."""
+    """Obtiene todas las facturas registradas con observaciones y dirección."""
     conn = connect_db()
     cursor = conn.cursor()
-    cursor.execute("""
-        SELECT f.id, f.num_factura, f.fecha_hora, f.cliente, f.metodo_pago, f.valor_total,
-               GROUP_CONCAT(CASE WHEN fc.comentarios IS NOT NULL AND fc.comentarios != '' THEN fc.comentarios ELSE NULL END, ' | ') as observaciones
-        FROM facturas f
-        LEFT JOIN facturas_completas fc ON f.num_factura = fc.num_factura
-        GROUP BY f.id
-        ORDER BY f.id DESC
-    """)
-    facturas = cursor.fetchall()
-    conn.close()
-    return facturas
+    try:
+        cursor.execute("""
+            SELECT f.id, f.num_factura, f.fecha_hora, f.cliente, f.metodo_pago, f.valor_total
+            FROM facturas f
+            ORDER BY f.id DESC
+        """)
+        facturas = cursor.fetchall()
+        
+        # Agregar dirección y observaciones desde facturas_completas
+        result = []
+        for fact in facturas:
+            fact_id, num_factura, fecha_hora, cliente, metodo_pago, valor_total = fact
+            
+            # Obtener dirección (la primera única)
+            cursor.execute("SELECT DISTINCT direccion FROM facturas_completas WHERE num_factura = ? AND direccion IS NOT NULL AND direccion != '' LIMIT 1", (num_factura,))
+            dir_row = cursor.fetchone()
+            direccion = dir_row[0] if dir_row else ""
+            
+            # Obtener observaciones
+            cursor.execute("SELECT GROUP_CONCAT(comentarios, ' | ') FROM facturas_completas WHERE num_factura = ? AND comentarios IS NOT NULL AND comentarios != ''", (num_factura,))
+            obs_row = cursor.fetchone()
+            observaciones = obs_row[0] if obs_row and obs_row[0] else ""
+            
+            result.append((fact_id, num_factura, fecha_hora, cliente, metodo_pago, valor_total, direccion, observaciones))
+        
+        conn.close()
+        return result
+    except Exception as e:
+        print(f"Error en get_all_facturas(): {e}")
+        conn.close()
+        return []
 
 
 def get_factura_by_id(factura_id):
-    """Obtiene una factura por su id, incluyendo observaciones concatenadas."""
+    """Obtiene una factura por su id, incluyendo observaciones y dirección concatenadas."""
     conn = connect_db()
     cursor = conn.cursor()
-    cursor.execute("""
-        SELECT f.id, f.num_factura, f.fecha_hora, f.cliente, f.metodo_pago, f.valor_total,
-               GROUP_CONCAT(CASE WHEN fc.comentarios IS NOT NULL AND fc.comentarios != '' THEN fc.comentarios ELSE NULL END, ' | ') as observaciones
-        FROM facturas f
-        LEFT JOIN facturas_completas fc ON f.num_factura = fc.num_factura
-        WHERE f.id = ?
-        GROUP BY f.id
-    """, (factura_id,))
-    row = cursor.fetchone()
-    conn.close()
-    return row
+    try:
+        cursor.execute("""
+            SELECT f.id, f.num_factura, f.fecha_hora, f.cliente, f.metodo_pago, f.valor_total
+            FROM facturas f
+            WHERE f.id = ?
+        """, (factura_id,))
+        fact = cursor.fetchone()
+        
+        if not fact:
+            conn.close()
+            return None
+        
+        fact_id, num_factura, fecha_hora, cliente, metodo_pago, valor_total = fact
+        
+        # Obtener dirección (la primera única)
+        cursor.execute("SELECT DISTINCT direccion FROM facturas_completas WHERE num_factura = ? AND direccion IS NOT NULL AND direccion != '' LIMIT 1", (num_factura,))
+        dir_row = cursor.fetchone()
+        direccion = dir_row[0] if dir_row else ""
+        
+        # Obtener observaciones
+        cursor.execute("SELECT GROUP_CONCAT(comentarios, ' | ') FROM facturas_completas WHERE num_factura = ? AND comentarios IS NOT NULL AND comentarios != ''", (num_factura,))
+        obs_row = cursor.fetchone()
+        observaciones = obs_row[0] if obs_row and obs_row[0] else ""
+        
+        conn.close()
+        return (fact_id, num_factura, fecha_hora, cliente, metodo_pago, valor_total, direccion, observaciones)
+    except Exception as e:
+        print(f"Error en get_factura_by_id(): {e}")
+        conn.close()
+        return None
 
 
 def update_factura(factura_id, cliente=None, metodo_pago=None, valor_total=None):
@@ -466,6 +517,86 @@ def set_saldos_iniciales(nequi, daviplata=None, efectivo=None):
     cursor.execute("UPDATE config_saldos SET nequi_inicial = ?, daviplata_inicial = ?, efectivo_inicial = ? WHERE id = 1", (nequi_val, daviplata_val, efectivo_val))
     conn.commit()
     conn.close()
+
+def actualizar_stock(stock_num):
+    # Aumentar stock solo a los productos que tienen stock > 0
+    try:
+        conn = connect_db()
+        cursor = conn.cursor()
+        cursor.execute("UPDATE productos SET stock = stock + ? WHERE stock > 0", (stock_num,))
+        conn.commit()
+    except Exception as e:
+        print("Error al actualizar stock:", e)
+    finally:
+        conn.close()
+
+# --- FUNCIONES PARA GUARDAR Y RECUPERAR ERRORES DEL CARRITO ---
+
+def save_cart_error(cart_items):
+    """Guarda los productos del carrito actual como error en la tabla cart_errores."""
+    try:
+        from datetime import datetime
+        conn = connect_db()
+        cursor = conn.cursor()
+        fecha_hora = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        
+        for product_id, item_data in cart_items.items():
+            nombre = item_data.get('nombre', '')
+            precio = item_data.get('precio', 0)
+            cantidad = item_data.get('cantidad', 0)
+            subtotal = precio * cantidad
+            
+            cursor.execute('''
+                INSERT INTO cart_errores (fecha_hora, producto_nombre, precio, cantidad, subtotal)
+                VALUES (?, ?, ?, ?, ?)
+            ''', (fecha_hora, nombre, precio, cantidad, subtotal))
+        
+        conn.commit()
+        conn.close()
+        print(f"✓ Carrito guardado como error: {len(cart_items)} productos")
+    except Exception as e:
+        print(f"Error al guardar carrito como error: {e}")
+
+def get_all_cart_errores():
+    """Recupera todos los errores del carrito (productos guardados con código 5263)."""
+    try:
+        conn = connect_db()
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT id, fecha_hora, producto_nombre, precio, cantidad, subtotal 
+            FROM cart_errores 
+            ORDER BY fecha_hora DESC
+        ''')
+        rows = cursor.fetchall()
+        conn.close()
+        return rows
+    except Exception as e:
+        print(f"Error al obtener errores del carrito: {e}")
+        return []
+
+def delete_cart_error(error_id):
+    """Elimina un error del carrito por su ID."""
+    try:
+        conn = connect_db()
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM cart_errores WHERE id = ?", (error_id,))
+        conn.commit()
+        conn.close()
+        print(f"✓ Error del carrito eliminado: {error_id}")
+    except Exception as e:
+        print(f"Error al eliminar error del carrito: {e}")
+
+def delete_all_cart_errores():
+    """Elimina todos los errores del carrito."""
+    try:
+        conn = connect_db()
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM cart_errores")
+        conn.commit()
+        conn.close()
+        print("✓ Todos los errores del carrito han sido eliminados")
+    except Exception as e:
+        print(f"Error al eliminar todos los errores del carrito: {e}")
 
 if __name__ == '__main__':
     create_tables()

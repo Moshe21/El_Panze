@@ -8,6 +8,14 @@ from datetime import datetime
 import subprocess
 from PIL import Image, ImageTk, ImageFilter
 
+# Paleta global (basada en logo.png)
+PALETTE_BG1 = "#D7C6AA"  # Fondo principal claro
+PALETTE_BG2 = "#D7C6AA"  # Fondo secundario
+PALETTE_ACCENT = '#733F34'  # Acento suave
+PALETTE_DARK = '#733F34'  # Marrón oscuro
+PALETTE_DARK2 = "#FFFFFF"  # fondo blanco
+
+
 
 
 
@@ -16,7 +24,7 @@ class DailyStatisticsWindow(tk.Toplevel):
     def __init__(self, parent, metodos_pago, fecha):
         super().__init__(parent)
         self.title("Estadísticas Detalladas del Día")
-        self.geometry("1400x600")
+        self.geometry("1500x900")
         self.resizable(True, True)
         
         self.metodos_pago = metodos_pago
@@ -43,7 +51,7 @@ class DailyStatisticsWindow(tk.Toplevel):
             datos = self.metodos_pago[metodo_pago]
             tab = ttk.Frame(notebook)
             notebook.add(tab, text=f"{metodo_pago} ({datos['cantidad']})")
-            self.crear_tabla_metodo(tab, metodo_pago, datos)
+            self.crear_encabezado(tab, metodo_pago, datos)
 
             # Separar facturas en dos listas: pago punto y resto
             facturas_pago_punto = []
@@ -55,11 +63,12 @@ class DailyStatisticsWindow(tk.Toplevel):
                 # Usamos try para soportar ambas
                 
                 direccion = factura[4]
-                if not (isinstance(direccion, str) and direccion.strip().lower() == "pago punto"):
-                    facturas_otros.append(factura)
-
-                else :
+                if isinstance(direccion, str) and direccion.strip().lower() == "pago punto":
                     facturas_pago_punto.append(factura)
+
+                else:
+                    facturas_otros.append(factura)
+                    
                 
 
             # Crear dos frames dentro de la pestaña: uno para pago punto, otro para el resto
@@ -69,20 +78,34 @@ class DailyStatisticsWindow(tk.Toplevel):
             frame_otros.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
 
             # Datos para cada tabla
-            datos_pago_punto = dict(datos)
-            datos_pago_punto['facturas'] = facturas_pago_punto
-            datos_pago_punto['cantidad'] = len(facturas_pago_punto)
-            datos_pago_punto['total'] = sum(f[5] for f in facturas_pago_punto) if facturas_pago_punto else 0
-
+            
             datos_otros = dict(datos)
             datos_otros['facturas'] = facturas_otros
             datos_otros['cantidad'] = len(facturas_otros)
             datos_otros['total'] = sum(f[5] for f in facturas_otros) if facturas_otros else 0
 
+            datos_pago_punto = dict(datos)
+            datos_pago_punto['facturas'] = facturas_pago_punto
+            datos_pago_punto['cantidad'] = len(facturas_pago_punto)
+            datos_pago_punto['total'] = sum(f[5] for f in facturas_pago_punto) if facturas_pago_punto else 0
+
+
             # Crear tablas
-            self.crear_tabla_metodo(frame_pago_punto, metodo_pago, datos_pago_punto)
             self.crear_tabla_metodo(frame_otros, metodo_pago, datos_otros)
-    
+            self.crear_tabla_metodo(frame_pago_punto, metodo_pago, datos_pago_punto)
+            
+    def crear_encabezado(self, parent_frame, metodo_pago, datos):
+        # frame superior
+        summary_frame = ttk.LabelFrame(parent_frame, text="Resumen", padding="10")
+        summary_frame.pack(fill=tk.X, padx=10, pady=10)
+        ttk.Label(summary_frame, text=f"Cantidad de ventas: {datos['cantidad']}", font=('Arial', 11, 'bold')).pack(side=tk.LEFT, padx=20)
+        ttk.Label(summary_frame, text=f"Total: ${datos['total']:,.0f}", font=('Arial', 11, 'bold'), foreground='green').pack(side=tk.LEFT, padx=20)
+        saldo_pendiente_var = tk.StringVar()
+        saldo_pendiente_var.set(f"Saldo Pendiente: ${datos['total']:,.0f}")
+        saldo_pendiente_label = ttk.Label(summary_frame, textvariable=saldo_pendiente_var, font=('Arial', 11, 'bold'), foreground='red')
+        saldo_pendiente_label.pack(side=tk.LEFT, padx=20)
+
+
     def crear_tabla_metodo(self, parent_frame, metodo_pago, datos):
         """Crea una tabla con las facturas de un método de pago específico, cada una con su propio saldo y checks."""
         # Frame superior con resumen
@@ -97,11 +120,11 @@ class DailyStatisticsWindow(tk.Toplevel):
 
         # Frame con tabla de facturas
         table_frame = ttk.LabelFrame(parent_frame, text=f"Facturas - {metodo_pago}", padding="10")
-        table_frame.pack(side=tk.LEFT, expand=True, padx=10, pady=10)
+        table_frame.pack(side=tk.LEFT, expand=True, fill=tk.X, padx=5)
 
         # Crear Treeview con columna de check
         columns = ("ID", "Nº Factura", "Hora", "Check", "Cliente", "Total", "Observaciones")
-        tree = ttk.Treeview(table_frame, columns=columns, show="headings", height=15)
+        tree = ttk.Treeview(table_frame, columns=columns, show="headings", height=5)
         tree.heading("ID", text="ID")
         tree.heading("Nº Factura", text="Nº Factura")
         tree.heading("Hora", text="Hora")
