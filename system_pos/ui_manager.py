@@ -8,6 +8,119 @@ from datetime import datetime
 import subprocess
 from PIL import Image, ImageTk, ImageFilter
 
+
+def _rounded_widget_bg(widget):
+    try:
+        return widget.cget("bg")
+    except tk.TclError:
+        return PALETTE_BG1
+
+
+def _rounded_rect(canvas_widget, x1, y1, x2, y2, radius, **kwargs):
+    points = [
+        x1 + radius, y1, x2 - radius, y1, x2, y1,
+        x2, y1 + radius, x2, y2 - radius, x2, y2,
+        x2 - radius, y2, x1 + radius, y2, x1, y2,
+        x1, y2 - radius, x1, y1 + radius, x1, y1,
+    ]
+    return canvas_widget.create_polygon(points, smooth=True, splinesteps=24, **kwargs)
+
+
+class RoundedButton(tk.Canvas):
+    """Botón redondeado que conserva la paleta y el comportamiento originales."""
+
+    def __init__(self, master, text, command=None, width=120, height=34,
+                 fill="#733F34", foreground="#FFFFFF",
+                 hover_fill="#5A3028", radius=11, font=("Arial", 10, "bold")):
+        super().__init__(master, width=width, height=height, bg=_rounded_widget_bg(master),
+                         highlightthickness=0, bd=0, cursor="hand2", takefocus=1)
+        self.label, self.command = text, command
+        self.fill_color, self.hover_fill = fill, hover_fill
+        self.foreground, self.radius, self.text_font = foreground, radius, font
+        self.hovered = False
+        self.bind("<Configure>", self._draw)
+        self.bind("<Enter>", self._enter)
+        self.bind("<Leave>", self._leave)
+        self.bind("<Button-1>", self._activate)
+        self.bind("<Return>", self._activate)
+        self.bind("<space>", self._activate)
+        self.after_idle(self._draw)
+
+    def _draw(self, _event=None):
+        self.delete("all")
+        width, height = max(8, self.winfo_width()), max(8, self.winfo_height())
+        fill = self.hover_fill if self.hovered else self.fill_color
+        _rounded_rect(self, 2, 2, width - 2, height - 2, self.radius, fill=fill, outline=fill)
+        self.create_text(width / 2, height / 2, text=self.label, fill=self.foreground,
+                         font=self.text_font, justify="center")
+
+    def _enter(self, _event):
+        self.hovered = True
+        self._draw()
+
+    def _leave(self, _event):
+        self.hovered = False
+        self._draw()
+
+    def _activate(self, _event=None):
+        self.focus_set()
+        if self.command:
+            self.command()
+
+
+class RoundedProductButton(tk.Canvas):
+    """Botón de producto original con esquinas redondeadas."""
+
+    def __init__(self, master, product, image, command, sold_out=False):
+        super().__init__(master, width=160, height=126, bg=_rounded_widget_bg(master),
+                         highlightthickness=0, bd=0, cursor="hand2", takefocus=1)
+        self.product, self.photo = product, image
+        self.command, self.sold_out = command, sold_out
+        self.hovered = False
+        self.bind("<Configure>", self._draw)
+        self.bind("<Enter>", self._enter)
+        self.bind("<Leave>", self._leave)
+        self.bind("<Button-1>", self._activate)
+        self.bind("<Return>", self._activate)
+        self.bind("<space>", self._activate)
+        self.after_idle(self._draw)
+
+    def _draw(self, _event=None):
+        self.delete("all")
+        width, height = max(20, self.winfo_width()), max(20, self.winfo_height())
+        if self.sold_out:
+            fill = "#5A4038" if self.hovered else "#3B2B26"
+            foreground = "#C9B9A8"
+        else:
+            fill = "#F39A2E" if self.hovered else "#FFAD43"
+            foreground = "#FFFFFF"
+        _rounded_rect(self, 2, 2, width - 2, height - 2, 14,
+                      fill=fill, outline="#733F34", width=1)
+        if self.photo:
+            self.create_image(width / 2, 38, image=self.photo)
+        product_id, name, price, category, stock = self.product
+        name_size = 8 if len(name) > 18 else 10
+        self.create_text(10, 76, anchor="nw", text=name, width=max(80, width - 20),
+                         fill=foreground, font=("Arial", name_size, "bold"))
+        self.create_text(10, height - 8, anchor="sw", text=f"${price:,.0f}",
+                         fill=foreground, font=("Arial", 10, "bold"))
+        if self.sold_out:
+            self.create_text(width - 8, height - 8, anchor="se", text="AGOTADO",
+                             fill=foreground, font=("Arial", 8, "bold"))
+
+    def _enter(self, _event):
+        self.hovered = True
+        self._draw()
+
+    def _leave(self, _event):
+        self.hovered = False
+        self._draw()
+
+    def _activate(self, _event=None):
+        self.focus_set()
+        if self.command:
+            self.command()
+
 # Paleta global (basada en logo.png)
 PALETTE_BG1 = "#D7C6AA"  # Fondo principal claro
 PALETTE_BG2 = "#D7C6AA"  # Fondo secundario
@@ -28,6 +141,7 @@ class POSApp:
         self.root.geometry(f"{screen_width}x{screen_height}")
 
         self.cart = {}
+        self.productos_agotados = set()  # ids de productos sin stock (se pueden vender igual)
         self.ultima_factura = None  # Guardar datos de la última factura impresa
         self.saved_carts = {}  # Carritos temporales guardados {nombre: {product_id: {...}}}
         self.current_cart_name = "Carrito Principal"  # Nombre del carrito actual
@@ -94,6 +208,13 @@ class POSApp:
         # Botón de producto con estilo propio
         self.style.configure('Product.TButton', font=('Arial', 10, 'bold'), foreground=self.PALETTE_DARK, background=self.PALETTE_BG3, borderwidth=1, relief='raised', padding=6)
         self.style.map('Product.TButton', background=[('active', self.PALETTE_ACCENT), ('!disabled', self.PALETTE_BG3)])
+
+        # Producto agotado: se ve oscuro pero sigue siendo clickeable
+        self.PALETTE_AGOTADO = '#3B2B26'
+        self.PALETTE_AGOTADO_TXT = '#C9B9A8'
+        self.style.configure('Agotado.TButton', font=('Arial', 10, 'bold'), foreground=self.PALETTE_AGOTADO_TXT, background=self.PALETTE_AGOTADO, borderwidth=1, relief='sunken', padding=6)
+        self.style.map('Agotado.TButton', background=[('active', '#5A4038'), ('!disabled', self.PALETTE_AGOTADO)],
+                        foreground=[('active', '#FFFFFF'), ('!disabled', self.PALETTE_AGOTADO_TXT)])
 
         # Botones de categoría/acción
         self.style.configure('Category.TButton', font=('Arial', 12, 'bold'), foreground=self.PALETTE_DARK2, background=self.PALETTE_ACCENT)
@@ -188,9 +309,22 @@ class POSApp:
         row, col = 0, 0
         for product in filtered_products:
             product_id, name, price, category, stock = product
-            button_text = f"{name}\n${price:,.0f}"
-            btn = ttk.Button(self.product_buttons_frame, text=button_text, style='Product.TButton',
-                            command=lambda p=(product_id, name, price): self.add_to_cart(p))
+            try:
+                stock_val = int(stock) if stock is not None else 0
+            except Exception:
+                stock_val = 0
+            if stock_val < 0:   # saldo negativo: no se muestra
+                continue
+            agotado = stock_val == 0
+            if agotado:
+                self.productos_agotados.add(product_id)
+            else:
+                self.productos_agotados.discard(product_id)
+            btn = RoundedProductButton(
+                self.product_buttons_frame, product, None,
+                command=lambda p=(product_id, name, price): self.add_to_cart(p),
+                sold_out=agotado
+            )
             btn.grid(row=row, column=col, padx=5, pady=5, sticky="nsew")
             col += 1
             if col > 3:
@@ -258,14 +392,14 @@ class POSApp:
 
         
 
-        ttk.Button(cart_frame, text="Eliminar del Carrito", command=self.remove_from_cart).pack(fill=tk.X, pady=2)
+        RoundedButton(cart_frame, "Eliminar del Carrito", self.remove_from_cart).pack(fill=tk.X, pady=2)
         # Frame para botones + y -
         qty_btns_frame = ttk.Frame(cart_listbox_frame)
         qty_btns_frame.pack(side=tk.LEFT, fill=tk.Y, padx=2)
 
-        self.increase_btn = ttk.Button(qty_btns_frame, text="+", width=3, command=self.increase_cart_item_qty)
+        self.increase_btn = RoundedButton(qty_btns_frame, "+", self.increase_cart_item_qty, width=38, height=34)
         self.increase_btn.pack(pady=(10,2))
-        self.decrease_btn = ttk.Button(qty_btns_frame, text="-", width=3, command=self.decrease_cart_item_qty)
+        self.decrease_btn = RoundedButton(qty_btns_frame, "-", self.decrease_cart_item_qty, width=38, height=34)
         self.decrease_btn.pack(pady=(2,10))
         # Total
         total_frame = ttk.Frame(cart_frame)
@@ -274,26 +408,31 @@ class POSApp:
         self.total_label = ttk.Label(total_frame, text="$ 0.00", font=('Arial', 16, 'bold'))
         self.total_label.pack(side=tk.RIGHT)
 
+        # Contador de productos vendidos sin stock (se actualiza tras cada venta)
+        self.agotados_label = ttk.Label(cart_frame, text="", font=('Arial', 10, 'bold'))
+        self.agotados_label.pack(fill=tk.X)
+        self.actualizar_contador_agotados()
+
         # Botones de Acción (al final)
         action_buttons_frame = ttk.Frame(cart_frame)
         action_buttons_frame.pack(fill=tk.X, pady=10)
 
-        ttk.Button(action_buttons_frame, text="Realizar Venta", command=self.process_sale, style='TButton').pack(side=tk.LEFT, expand=True, fill=tk.X, padx=5)
-        ttk.Button(action_buttons_frame, text="Vaciar Carrito", command=self.confirm_clear_cart, style='TButton').pack(side=tk.RIGHT, expand=True, fill=tk.X, padx=5)
+        RoundedButton(action_buttons_frame, "Realizar Venta", self.process_sale).pack(side=tk.LEFT, expand=True, fill=tk.X, padx=5)
+        RoundedButton(action_buttons_frame, "Vaciar Carrito", self.confirm_clear_cart).pack(side=tk.RIGHT, expand=True, fill=tk.X, padx=5)
 
         # Botones para guardar/cargar carritos
         cart_management_frame = ttk.Frame(cart_frame)
         cart_management_frame.pack(fill=tk.X, pady=5)
         
-        ttk.Button(cart_management_frame, text="💾 Guardar Carrito", command=self.save_current_cart).pack(side=tk.LEFT, expand=True, fill=tk.X, padx=2)
-        ttk.Button(cart_management_frame, text="📂 Cargar Carrito", command=self.show_load_cart_modal).pack(side=tk.RIGHT, expand=True, fill=tk.X, padx=2)
-        ttk.Button(
-                    cart_management_frame,
-                    text="🕒 Pedidos pendientes",
-                    command=lambda: PendingOrdersModal(self.root, self)
+        RoundedButton(cart_management_frame, "💾 Guardar Carrito", self.save_current_cart).pack(side=tk.LEFT, expand=True, fill=tk.X, padx=2)
+        RoundedButton(cart_management_frame, "📂 Cargar Carrito", self.show_load_cart_modal).pack(side=tk.RIGHT, expand=True, fill=tk.X, padx=2)
+        RoundedButton(
+                    cart_frame,
+                    "🕒 Pedidos pendientes",
+                    lambda: PendingOrdersModal(self.root, self)
                 ).pack(fill=tk.X, pady=4)
 
-        ttk.Button(cart_frame, text="Actualizar pagina", command=self.reload).pack(fill="x", pady=10)
+        RoundedButton(cart_frame, "Actualizar pagina", self.reload).pack(fill="x", pady=10)
     
 
 
@@ -394,16 +533,20 @@ class POSApp:
         if not hasattr(self, 'product_images'):
             self.product_images = {}
         row, col = 0, 0
+        self.productos_agotados = set()
         for product in products:
             product_id, name, price, category, stock = product
-            # Ocultar productos sin stock
+            # Stock 0  -> se muestra oscuro, se puede vender igual y queda registrado.
+            # Stock < 0 -> saldo negativo: no se muestra.
             try:
                 stock_val = int(stock) if stock is not None else 0
             except Exception:
                 stock_val = 0
-            if stock_val <= 0:
+            if stock_val < 0:
                 continue
-            button_text = f"{name}\n${price:,.0f}" # Formatear precio
+            agotado = stock_val == 0
+            if agotado:
+                self.productos_agotados.add(product_id)
 
             # Intentar cargar imagen desde assets con varios nombres/fallbacks
             img_path_candidates = [
@@ -432,12 +575,11 @@ class POSApp:
                 except Exception:
                     photo = None
 
-            if photo:
-                btn = ttk.Button(self.product_buttons_frame, text=button_text, image=photo, compound='top', style='Product.TButton',
-                                 command=lambda p=(product_id, name, price): self.add_to_cart(p))
-            else:
-                btn = ttk.Button(self.product_buttons_frame, text=button_text, style='Product.TButton',
-                                 command=lambda p=(product_id, name, price): self.add_to_cart(p))
+            btn = RoundedProductButton(
+                self.product_buttons_frame, product, photo,
+                command=lambda p=(product_id, name, price): self.add_to_cart(p),
+                sold_out=agotado
+            )
             btn.grid(row=row, column=col, padx=5, pady=5, sticky="nsew")
             col += 1
             if col > 3: # 4 botones por fila
@@ -446,6 +588,19 @@ class POSApp:
         if col > 0:  # Only configure if there are columns
             self.product_buttons_frame.grid_columnconfigure(tuple(range(col)), weight=1)
 
+    def actualizar_contador_agotados(self):
+        """Refresca el contador de productos vendidos sin stock hoy."""
+        if not hasattr(self, 'agotados_label'):
+            return
+        try:
+            n = db_manager.contar_ventas_agotados()
+        except Exception:
+            n = 0
+        if n:
+            self.agotados_label.config(text=f"⚠ Vendidos sin stock hoy: {n}", foreground='#B00020')
+        else:
+            self.agotados_label.config(text="", foreground=self.PALETTE_DARK)
+
     def add_to_cart(self, product):
         """Añade un producto al carrito."""
         product_id, name, price = product
@@ -453,6 +608,8 @@ class POSApp:
             self.cart[product_id]['cantidad'] += 1
         else:
             self.cart[product_id] = {'nombre': name, 'precio': price, 'cantidad': 1, 'id': product_id}
+        if product_id in self.productos_agotados:
+            self.cart[product_id]['agotado'] = True
         self.update_cart_display()
 
     def remove_from_cart(self):
@@ -503,7 +660,8 @@ class POSApp:
         total = 0
         for product_id, item_data in self.cart.items():
             subtotal = item_data['cantidad'] * item_data['precio']
-            self.cart_listbox.insert(tk.END, f"{item_data['nombre']} ({item_data['cantidad']} x ${item_data['precio']:,.0f}) - ${subtotal:,.0f}")
+            marca = "⚠ " if item_data.get('agotado') else ""
+            self.cart_listbox.insert(tk.END, f"{marca}{item_data['nombre']} ({item_data['cantidad']} x ${item_data['precio']:,.0f}) - ${subtotal:,.0f}")
             total += subtotal
         self.total_label.config(text=f"$ {total:,.0f}")
 
@@ -1186,122 +1344,248 @@ class POSApp:
             messagebox.showerror("Error", f"No se pudo generar el PDF: {e}")
 
     def manage_products(self):
-        """Abre una nueva ventana para la gestión de productos."""
-        manage_window = tk.Toplevel(self.root)
-        manage_window.title("Gestionar Productos")
-        manage_window.geometry("600x400")
+        """Abre el CRUD completo para crear, consultar, editar y eliminar productos."""
+        if hasattr(self, 'manage_window') and self.manage_window.winfo_exists():
+            self.manage_window.lift()
+            self.manage_window.focus_force()
+            return
 
-        # Frame para añadir productos
-        add_frame = ttk.LabelFrame(manage_window, text="Añadir Producto", padding="10")
-        add_frame.pack(pady=10, fill=tk.X)
+        self.manage_window = tk.Toplevel(self.root)
+        self.manage_window.title("Gestionar Productos")
+        self.manage_window.geometry("900x610")
+        self.manage_window.minsize(760, 520)
+        self.manage_window.transient(self.root)
+        self.admin_editing_product_id = None
+        self.prod_image_path = None
 
-        ttk.Label(add_frame, text="Nombre:").grid(row=0, column=0, padx=5, pady=2, sticky="w")
+        add_frame = ttk.LabelFrame(self.manage_window, text="Datos del producto", padding="12")
+        add_frame.pack(padx=12, pady=(12, 6), fill=tk.X)
+        add_frame.grid_columnconfigure(1, weight=1)
+        add_frame.grid_columnconfigure(3, weight=1)
+
+        ttk.Label(add_frame, text="Nombre:").grid(row=0, column=0, padx=5, pady=5, sticky="w")
         self.prod_name_entry = ttk.Entry(add_frame)
-        self.prod_name_entry.grid(row=0, column=1, padx=5, pady=2, sticky="ew")
+        self.prod_name_entry.grid(row=0, column=1, padx=5, pady=5, sticky="ew")
 
-        ttk.Label(add_frame, text="Precio:").grid(row=1, column=0, padx=5, pady=2, sticky="w")
+        ttk.Label(add_frame, text="Precio:").grid(row=0, column=2, padx=5, pady=5, sticky="w")
         self.prod_price_entry = ttk.Entry(add_frame)
-        self.prod_price_entry.grid(row=1, column=1, padx=5, pady=2, sticky="ew")
+        self.prod_price_entry.grid(row=0, column=3, padx=5, pady=5, sticky="ew")
 
-        ttk.Label(add_frame, text="Categoría:").grid(row=2, column=0, padx=5, pady=2, sticky="w")
+        ttk.Label(add_frame, text="Categoría:").grid(row=1, column=0, padx=5, pady=5, sticky="w")
         self.prod_category_entry = ttk.Entry(add_frame)
-        self.prod_category_entry.grid(row=2, column=1, padx=5, pady=2, sticky="ew")
+        self.prod_category_entry.grid(row=1, column=1, padx=5, pady=5, sticky="ew")
+        self.prod_category_entry.insert(0, "General")
 
-        ttk.Label(add_frame, text="Stock:").grid(row=3, column=0, padx=5, pady=2, sticky="w")
+        ttk.Label(add_frame, text="Stock:").grid(row=1, column=2, padx=5, pady=5, sticky="w")
         self.prod_stock_entry = ttk.Entry(add_frame)
-        self.prod_stock_entry.grid(row=3, column=1, padx=5, pady=2, sticky="ew")
-        self.prod_stock_entry.insert(0, "0") # Valor por defecto
+        self.prod_stock_entry.grid(row=1, column=3, padx=5, pady=5, sticky="ew")
+        self.prod_stock_entry.insert(0, "0")
 
-        ttk.Label(add_frame, text="Imagen (opcional):").grid(row=4, column=0, padx=5, pady=2, sticky="w")
-        ttk.Button(add_frame, text="Seleccionar Imagen", command=self.select_product_image).grid(row=4, column=1, padx=5, pady=2, sticky="ew")
+        ttk.Label(add_frame, text="Imagen (opcional):").grid(row=2, column=0, padx=5, pady=5, sticky="w")
+        RoundedButton(add_frame, "Seleccionar imagen", self.select_product_image, width=150).grid(
+            row=2, column=1, padx=5, pady=5, sticky="w"
+        )
         self.prod_image_preview = ttk.Label(add_frame)
-        self.prod_image_preview.grid(row=5, column=0, columnspan=2, pady=(5,8))
+        self.prod_image_preview.grid(row=2, column=2, padx=5, pady=5, sticky="w")
 
-        ttk.Button(add_frame, text="Añadir Producto", command=self._add_product_admin).grid(row=6, columnspan=2, pady=10)
+        form_actions = ttk.Frame(add_frame)
+        form_actions.grid(row=3, column=0, columnspan=4, sticky="ew", pady=(10, 0))
+        RoundedButton(form_actions, "Nuevo / Limpiar", self._clear_product_admin).pack(
+            side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 4)
+        )
+        RoundedButton(form_actions, "Crear producto", self._add_product_admin).pack(
+            side=tk.LEFT, fill=tk.X, expand=True, padx=4
+        )
+        RoundedButton(form_actions, "Guardar cambios", self._update_product_admin).pack(
+            side=tk.LEFT, fill=tk.X, expand=True, padx=(4, 0)
+        )
 
-        # Lista de productos (para visualizar y editar/eliminar)
-        products_list_frame = ttk.LabelFrame(manage_window, text="Lista de Productos", padding="10")
-        products_list_frame.pack(pady=10, fill=tk.BOTH, expand=True)
+        products_list_frame = ttk.LabelFrame(
+            self.manage_window,
+            text="Productos — selecciona una fila para editar",
+            padding="10"
+        )
+        products_list_frame.pack(padx=12, pady=6, fill=tk.BOTH, expand=True)
+        tree_container = ttk.Frame(products_list_frame)
+        tree_container.pack(fill=tk.BOTH, expand=True)
 
-        self.products_tree = ttk.Treeview(products_list_frame, columns=("ID", "Nombre", "Precio", "Categoría", "Stock"), show="headings")
+        self.products_tree = ttk.Treeview(
+            tree_container,
+            columns=("ID", "Nombre", "Precio", "Categoría", "Stock"),
+            show="headings",
+            selectmode="browse"
+        )
         self.products_tree.heading("ID", text="ID")
         self.products_tree.heading("Nombre", text="Nombre")
         self.products_tree.heading("Precio", text="Precio")
         self.products_tree.heading("Categoría", text="Categoría")
         self.products_tree.heading("Stock", text="Stock")
-        self.products_tree.column("ID", width=50)
-        self.products_tree.column("Nombre", width=150)
-        self.products_tree.column("Precio", width=80)
-        self.products_tree.column("Categoría", width=100)
-        self.products_tree.column("Stock", width=60)
-        self.products_tree.pack(fill=tk.BOTH, expand=True)
+        self.products_tree.column("ID", width=55, minwidth=45, anchor=tk.CENTER, stretch=False)
+        self.products_tree.column("Nombre", width=260, minwidth=150)
+        self.products_tree.column("Precio", width=110, minwidth=85, anchor=tk.E)
+        self.products_tree.column("Categoría", width=170, minwidth=100)
+        self.products_tree.column("Stock", width=80, minwidth=60, anchor=tk.CENTER)
+        tree_scroll = ttk.Scrollbar(tree_container, orient="vertical", command=self.products_tree.yview)
+        self.products_tree.configure(yscrollcommand=tree_scroll.set)
+        self.products_tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        tree_scroll.pack(side=tk.RIGHT, fill=tk.Y)
+        self.products_tree.bind("<<TreeviewSelect>>", self._select_product_admin)
 
-        ttk.Button(products_list_frame, text="Actualizar Lista", command=self._load_products_admin).pack(pady=5)
-        ttk.Button(products_list_frame, text="Eliminar Producto Seleccionado", command=self._delete_product_admin).pack(pady=5)
+        list_actions = ttk.Frame(products_list_frame)
+        list_actions.pack(fill=tk.X, pady=(8, 0))
+        RoundedButton(list_actions, "Actualizar lista", self._load_products_admin).pack(
+            side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 4)
+        )
+        RoundedButton(list_actions, "Eliminar seleccionado", self._delete_product_admin).pack(
+            side=tk.LEFT, fill=tk.X, expand=True, padx=4
+        )
+        RoundedButton(list_actions, "Cerrar", self.manage_window.destroy).pack(
+            side=tk.RIGHT, fill=tk.X, expand=True, padx=(4, 0)
+        )
 
-        self._load_products_admin() # Cargar productos al abrir la ventana de administración
+        self._load_products_admin()
+        self.prod_name_entry.focus_set()
 
-    def _add_product_admin(self):
-        name = self.prod_name_entry.get()
-        price_str = self.prod_price_entry.get()
-        category = self.prod_category_entry.get()
-        stock_str = self.prod_stock_entry.get()
-        image_path = getattr(self, 'prod_image_path', None)
+    def _parse_product_admin_form(self):
+        name = self.prod_name_entry.get().strip()
+        category = self.prod_category_entry.get().strip() or "General"
+        price_text = self.prod_price_entry.get().strip().replace("$", "").replace(" ", "")
+        stock_text = self.prod_stock_entry.get().strip()
 
-        if not name or not price_str:
-            messagebox.showwarning("Advertencia", "Nombre y Precio son campos obligatorios.")
-            return
+        if not name or not price_text:
+            messagebox.showwarning("Datos incompletos", "Nombre y precio son obligatorios.")
+            return None
+
+        # Admite formatos colombianos como 12.000 y 12.000,50.
+        if "." in price_text and "," in price_text:
+            if price_text.rfind(",") > price_text.rfind("."):
+                price_text = price_text.replace(".", "").replace(",", ".")
+            else:
+                price_text = price_text.replace(",", "")
+        elif "," in price_text:
+            decimals = len(price_text.rsplit(",", 1)[1])
+            price_text = price_text.replace(",", "" if decimals == 3 else ".")
+        elif "." in price_text and len(price_text.rsplit(".", 1)[1]) == 3:
+            price_text = price_text.replace(".", "")
 
         try:
-            price = float(price_str)
-            stock = int(stock_str)
+            price = float(price_text)
+            stock = int(stock_text or "0")
         except ValueError:
-            messagebox.showwarning("Advertencia", "Precio y Stock deben ser números válidos.")
-            return
+            messagebox.showwarning("Datos inválidos", "Precio y stock deben ser números válidos.")
+            return None
+        return name, price, category, stock
 
+    def _save_product_admin_image(self, product_id):
+        image_path = getattr(self, 'prod_image_path', None)
+        if not image_path:
+            return True
+        try:
+            assets_dir = os.path.join(os.path.dirname(__file__), 'assets')
+            os.makedirs(assets_dir, exist_ok=True)
+            img = Image.open(image_path).convert('RGBA')
+            img.thumbnail((300, 225), Image.LANCZOS)
+            img.save(os.path.join(assets_dir, f"{product_id}.png"), format='PNG')
+            if hasattr(self, 'product_images'):
+                self.product_images.pop(product_id, None)
+            return True
+        except Exception as e:
+            messagebox.showwarning("Imagen", f"El producto se guardó, pero la imagen falló: {e}")
+            return False
+
+    def _add_product_admin(self):
+        values = self._parse_product_admin_form()
+        if values is None:
+            return
+        name, price, category, stock = values
         try:
             product_id = db_manager.add_product(name, price, category, stock)
         except Exception as e:
             messagebox.showerror("Error", f"No se pudo añadir el producto: {e}")
             return
-
-        # Si se seleccionó una imagen, generar y guardar thumbnail en assets/{id}.png
-        if image_path:
-            try:
-                from PIL import Image
-                if not os.path.exists('assets'): # <--- VERIFICA RUTA CARPETA ASSETS
-                    os.makedirs('assets') # <--- CREA RUTA CARPETA ASSETS
-                img = Image.open(image_path) # <--- EJECUTA RUTA (ABRIR IMAGEN ORIGEN)
-                img = img.convert('RGBA')
-                img.thumbnail((300, 225), Image.LANCZOS)
-                dest_path = os.path.join('assets', f"{product_id}.png") # <--- RUTA DESTINO IMAGEN
-                img.save(dest_path, format='PNG') # <--- EJECUTA RUTA (GUARDAR IMAGEN)
-            except Exception as e:
-                messagebox.showwarning("Imagen", f"No se pudo procesar la imagen: {e}")
-
+        self._save_product_admin_image(product_id)
         messagebox.showinfo("Éxito", "Producto añadido correctamente.")
         self._load_products_admin()
-        self.prod_name_entry.delete(0, tk.END)
-        self.prod_price_entry.delete(0, tk.END)
-        self.prod_category_entry.delete(0, tk.END)
-        self.prod_stock_entry.delete(0, tk.END)
+        self._clear_product_admin()
+
+    def _update_product_admin(self):
+        if self.admin_editing_product_id is None:
+            messagebox.showwarning("Selecciona un producto", "Selecciona una fila antes de guardar cambios.")
+            return
+        values = self._parse_product_admin_form()
+        if values is None:
+            return
+        name, price, category, stock = values
+        product_id = self.admin_editing_product_id
+        try:
+            updated = db_manager.update_product(product_id, name, price, category, stock)
+        except Exception as e:
+            messagebox.showerror("Error", f"No se pudo actualizar el producto: {e}")
+            return
+        if not updated:
+            messagebox.showwarning("No encontrado", "El producto ya no existe.")
+            self._load_products_admin()
+            self._clear_product_admin()
+            return
+        self._save_product_admin_image(product_id)
+        messagebox.showinfo("Éxito", "Producto actualizado correctamente.")
+        self._load_products_admin(select_id=product_id)
+
+    def _clear_product_admin(self):
+        self.admin_editing_product_id = None
+        for entry in (
+            self.prod_name_entry,
+            self.prod_price_entry,
+            self.prod_category_entry,
+            self.prod_stock_entry,
+        ):
+            entry.delete(0, tk.END)
+        self.prod_category_entry.insert(0, "General")
         self.prod_stock_entry.insert(0, "0")
-        # Limpiar selección de imagen y preview
         self.prod_image_path = None
-        if hasattr(self, 'prod_image_preview_photo'):
-            try:
-                self.prod_image_preview.config(image='')
-            except Exception:
-                pass
+        self.prod_image_preview.config(image='')
+        if hasattr(self, 'products_tree'):
+            self.products_tree.selection_remove(self.products_tree.selection())
+        self.prod_name_entry.focus_set()
+
+    def _select_product_admin(self, _event=None):
+        selection = self.products_tree.selection()
+        if not selection:
+            return
+        values = self.products_tree.item(selection[0], 'values')
+        if not values:
+            return
+        product_id, name, price, category, stock = values
+        self.admin_editing_product_id = int(product_id)
+        entries = (
+            (self.prod_name_entry, name),
+            (self.prod_price_entry, price),
+            (self.prod_category_entry, category or "General"),
+            (self.prod_stock_entry, stock),
+        )
+        for entry, value in entries:
+            entry.delete(0, tk.END)
+            entry.insert(0, str(value))
+        self.prod_image_path = None
+        self.prod_image_preview.config(image='')
 
 
-    def _load_products_admin(self):
+    def _load_products_admin(self, select_id=None):
         for item in self.products_tree.get_children():
             self.products_tree.delete(item)
         products = db_manager.get_all_products()
         for product in products:
-            self.products_tree.insert("", tk.END, values=product)
-        self.load_products() # Recargar los botones en la ventana principal
+            product_id, name, price, category, stock = product
+            price_display = f"${price:,.0f}"
+            iid = self.products_tree.insert(
+                "", tk.END, iid=str(product_id),
+                values=(product_id, name, price_display, category or "General", stock)
+            )
+            if select_id is not None and int(product_id) == int(select_id):
+                self.products_tree.selection_set(iid)
+                self.products_tree.focus(iid)
+                self.products_tree.see(iid)
+        self.load_products()
 
 
     def select_product_image(self):
@@ -1337,18 +1621,36 @@ class POSApp:
     def _delete_product_admin(self):
         selected_item = self.products_tree.selection()
         if not selected_item:
-            messagebox.showwarning("Advertencia", "Por favor, selecciona un producto para eliminar.")
+            messagebox.showwarning("Selecciona un producto", "Selecciona el producto que deseas eliminar.")
             return
 
-        product_id = self.products_tree.item(selected_item, 'values')[0]
-        if messagebox.askyesno("Confirmar Eliminación", "¿Estás seguro de que quieres eliminar este producto?"):
-            conn = db_manager.connect_db()
-            cursor = conn.cursor()
-            cursor.execute("DELETE FROM productos WHERE id=?", (product_id,))
-            conn.commit()
-            conn.close()
+        values = self.products_tree.item(selected_item[0], 'values')
+        product_id = int(values[0])
+        product_name = values[1]
+        if product_id in self.cart:
+            messagebox.showwarning(
+                "Producto en el carrito",
+                "Retira este producto del carrito actual antes de eliminarlo."
+            )
+            return
+        if not messagebox.askyesno(
+            "Confirmar eliminación",
+            f"¿Eliminar definitivamente '{product_name}'?\n\nEsta acción no se puede deshacer."
+        ):
+            return
+        try:
+            deleted = db_manager.delete_product(product_id)
+        except Exception as e:
+            messagebox.showerror("Error", f"No se pudo eliminar el producto: {e}")
+            return
+        if deleted:
+            if hasattr(self, 'product_images'):
+                self.product_images.pop(product_id, None)
             messagebox.showinfo("Éxito", "Producto eliminado correctamente.")
-            self._load_products_admin()
+        else:
+            messagebox.showwarning("No encontrado", "El producto ya no existe.")
+        self._load_products_admin()
+        self._clear_product_admin()
 
     def crear_factura_empresa(self):
         import tkinter.filedialog
@@ -1485,10 +1787,10 @@ class POSApp:
                 messagebox.showerror("Error", f"No se pudo exportar: {e}")
 
     def modo_pro(self):
-        """Abre un modal para activar/desactivar el modo pro (botones de editar/eliminar en facturas)."""
+        """Muestra el estado y exige contraseña para cambiar el modo pro."""
         dialog = tk.Toplevel(self.root)
         dialog.title("Modo Pro")
-        dialog.geometry("400x200")
+        dialog.geometry("420x290")
         dialog.transient(self.root)
         dialog.grab_set()
 
@@ -1503,23 +1805,50 @@ class POSApp:
         # Descripción
         ttk.Label(dialog, text="El modo pro habilita los botones de editar y eliminar\nen la ventana de facturas.", font=('Arial', 9), justify=tk.CENTER).pack(pady=10)
 
+        # La contraseña se valida al cambiar el estado.
+        password_frame = ttk.Frame(dialog)
+        password_frame.pack(fill=tk.X, padx=25, pady=(5, 10))
+        ttk.Label(password_frame, text="Contraseña:", font=('Arial', 10, 'bold')).pack(side=tk.LEFT, padx=(0, 8))
+        password_entry = ttk.Entry(password_frame, show='*', font=('Arial', 11))
+        password_entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        password_entry.focus_set()
+
         # Frame de botones
         btn_frame = ttk.Frame(dialog)
-        btn_frame.pack(fill=tk.X, padx=20, pady=20)
+        btn_frame.pack(fill=tk.X, padx=20, pady=15)
+
+        def password_correcta():
+            if password_entry.get() == "2684":
+                return True
+            messagebox.showerror(
+                "Contraseña incorrecta",
+                "La contraseña de Modo Pro no es correcta.",
+                parent=dialog
+            )
+            password_entry.selection_range(0, tk.END)
+            password_entry.focus_set()
+            return False
 
         def activar_modo_pro():
+            if not password_correcta():
+                return
             self.modo_pro_activo = True
             estado_label.config(text="Estado actual: Activado")
-            messagebox.showinfo("Modo Pro", "✓ Modo Pro activado correctamente.\nLos botones de editar y eliminar están habilitados.")
+            password_entry.delete(0, tk.END)
+            messagebox.showinfo("Modo Pro", "✓ Modo Pro activado correctamente.\nLos botones de editar y eliminar están habilitados.", parent=dialog)
 
         def desactivar_modo_pro():
+            if not password_correcta():
+                return
             self.modo_pro_activo = False
             estado_label.config(text="Estado actual: Desactivado")
-            messagebox.showinfo("Modo Pro", "✗ Modo Pro desactivado correctamente.\nLos botones de editar y eliminar están deshabilitados.")
+            password_entry.delete(0, tk.END)
+            messagebox.showinfo("Modo Pro", "✗ Modo Pro desactivado correctamente.\nLos botones de editar y eliminar están deshabilitados.", parent=dialog)
 
-        ttk.Button(btn_frame, text="✓ Activar", command=activar_modo_pro).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=5)
-        ttk.Button(btn_frame, text="✗ Desactivar", command=desactivar_modo_pro).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=5)
-        ttk.Button(btn_frame, text="Cerrar", command=dialog.destroy).pack(side=tk.RIGHT, fill=tk.X, expand=True, padx=5)
+        RoundedButton(btn_frame, "✓ Activar", activar_modo_pro).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=5)
+        RoundedButton(btn_frame, "✗ Desactivar", desactivar_modo_pro).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=5)
+        RoundedButton(btn_frame, "Cerrar", dialog.destroy).pack(side=tk.RIGHT, fill=tk.X, expand=True, padx=5)
+        password_entry.bind('<Return>', lambda _event: activar_modo_pro())
 
     def load_categories(self):
         # Función placeholder: Reemplazar con implementación real
@@ -1569,13 +1898,25 @@ class POSApp:
                 # Modal 3: Capturar observaciones de cada producto
                 def on_observations_saved(observations):
                     try:
+                        items_agotados = [
+                            {'nombre': it['nombre'], 'cantidad': it['cantidad'], 'precio': it['precio']}
+                            for it in items
+                            if self.cart.get(it['id'], {}).get('agotado')
+                        ]
+
                         num_factura = db_manager.record_sale(total_with_shipping, items, cliente=client, direccion=address, metodo_pago=method_display, observaciones=observations, split_payment=split_data)
 
-                        # Recargar productos en UI para ocultar los que quedaron sin stock
+                        try:
+                            db_manager.registrar_venta_agotado(num_factura, items_agotados)
+                        except Exception as e:
+                            print(f"Error registrando ventas de agotados: {e}")
+
+                        # Recargar productos en UI para reflejar el stock nuevo
                         try:
                             self.load_products()
                         except Exception as e:
                             print(f"Error recargando productos: {e}")
+                        self.actualizar_contador_agotados()
 
                         # Generar factura con detalles de pago, dirección y observaciones
                         try:

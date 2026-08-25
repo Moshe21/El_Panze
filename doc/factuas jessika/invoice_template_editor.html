@@ -1,0 +1,192 @@
+
+<div style="background: var(--color-background-primary); padding: 2rem; font-family: var(--font-sans);">
+  <div style="max-width: 900px; margin: 0 auto;">
+    
+    <!-- Sección de edición de datos -->
+    <div style="background: var(--color-background-secondary); padding: 1.5rem; border-radius: var(--border-radius-lg); margin-bottom: 2rem;">
+      <h2 style="font-size: 18px; font-weight: 500; margin: 0 0 1.5rem; color: var(--color-text-primary);">Datos de la factura</h2>
+      
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 1.5rem;">
+        <div>
+          <label style="display: block; font-size: 13px; color: var(--color-text-secondary); margin-bottom: 6px; font-weight: 500;">Nombre empresa</label>
+          <input type="text" id="empresa" value="El Panze" style="width: 100%;">
+        </div>
+        <div>
+          <label style="display: block; font-size: 13px; color: var(--color-text-secondary); margin-bottom: 6px; font-weight: 500;">NIT</label>
+          <input type="text" id="nit" value="8080009247-3" style="width: 100%;">
+        </div>
+        <div>
+          <label style="display: block; font-size: 13px; color: var(--color-text-secondary); margin-bottom: 6px; font-weight: 500;">Dirección</label>
+          <input type="text" id="direccion" value="Cra. 7 No. 7-11" style="width: 100%;">
+        </div>
+        <div>
+          <label style="display: block; font-size: 13px; color: var(--color-text-secondary); margin-bottom: 6px; font-weight: 500;">Teléfono</label>
+          <input type="text" id="telefono" value="310 767 4031" style="width: 100%;">
+        </div>
+      </div>
+
+      <h3 style="font-size: 16px; font-weight: 500; margin: 1.5rem 0 1rem; color: var(--color-text-primary);">Cliente</h3>
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 1.5rem;">
+        <div>
+          <label style="display: block; font-size: 13px; color: var(--color-text-secondary); margin-bottom: 6px; font-weight: 500;">Nombre cliente</label>
+          <input type="text" id="cliente" value="Proyecc SAS" style="width: 100%;">
+        </div>
+        <div>
+          <label style="display: block; font-size: 13px; color: var(--color-text-secondary); margin-bottom: 6px; font-weight: 500;">Documento</label>
+          <input type="text" id="documento" value="Fact. No. 7-11" style="width: 100%;">
+        </div>
+        <div>
+          <label style="display: block; font-size: 13px; color: var(--color-text-secondary); margin-bottom: 6px; font-weight: 500;">Fecha emisión</label>
+          <input type="date" id="fechaEmision" value="2025-09-10" style="width: 100%;">
+        </div>
+        <div>
+          <label style="display: block; font-size: 13px; color: var(--color-text-secondary); margin-bottom: 6px; font-weight: 500;">Fecha entrega</label>
+          <input type="date" id="fechaEntrega" value="2025-09-18" style="width: 100%;">
+        </div>
+      </div>
+    </div>
+
+    <!-- Vista previa de factura -->
+    <div style="background: white; border: 0.5px solid var(--color-border-tertiary); border-radius: var(--border-radius-lg); padding: 2rem; position: relative;">
+      
+      <!-- Encabezado -->
+      <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 2rem; padding-bottom: 1.5rem; border-bottom: 1px solid var(--color-border-tertiary);">
+        <div>
+          <h1 style="font-size: 28px; font-weight: 700; margin: 0 0 8px; color: #8B6F47; font-family: 'Comic Sans MS', cursive;" id="preview-empresa">El Panze</h1>
+          <p style="margin: 4px 0; font-size: 13px; color: var(--color-text-secondary);" id="preview-nit"><strong>NIT:</strong> 8080009247-3</p>
+          <p style="margin: 4px 0; font-size: 13px; color: var(--color-text-secondary);" id="preview-direccion"><strong>Dirección:</strong> Cra. 7 No. 7-11</p>
+          <p style="margin: 4px 0; font-size: 13px; color: var(--color-text-secondary);" id="preview-telefono"><strong>Teléfono:</strong> 310 767 4031</p>
+        </div>
+        <div style="text-align: right; font-size: 13px;">
+          <p style="margin: 0 0 8px; font-weight: 600; color: var(--color-text-primary);">FACTURA</p>
+          <p style="margin: 4px 0; color: var(--color-text-secondary);">No. <span id="preview-documento">7-11</span></p>
+          <p style="margin: 4px 0; color: var(--color-text-secondary);">Emitida: <span id="preview-fechaEmision">10/09/2025</span></p>
+          <p style="margin: 4px 0; color: var(--color-text-secondary);">Entrega: <span id="preview-fechaEntrega">18/09/2025</span></p>
+        </div>
+      </div>
+
+      <!-- Datos cliente -->
+      <div style="margin-bottom: 2rem; background: var(--color-background-secondary); padding: 1rem; border-radius: var(--border-radius-md);">
+        <p style="margin: 0 0 8px; font-size: 13px; font-weight: 600; color: var(--color-text-primary);">CLIENTE</p>
+        <p style="margin: 4px 0; font-size: 13px; color: var(--color-text-primary);" id="preview-cliente"><strong>Proyecc SAS</strong></p>
+      </div>
+
+      <!-- Tabla de items -->
+      <div style="margin-bottom: 2rem; overflow-x: auto;">
+        <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
+          <thead>
+            <tr style="background: var(--color-background-secondary); border-bottom: 1px solid var(--color-border-tertiary);">
+              <th style="text-align: left; padding: 12px 8px; font-weight: 600; color: var(--color-text-primary);">CANT</th>
+              <th style="text-align: left; padding: 12px 8px; font-weight: 600; color: var(--color-text-primary);">DESCRIPCIÓN</th>
+              <th style="text-align: right; padding: 12px 8px; font-weight: 600; color: var(--color-text-primary);">V.Unit.</th>
+              <th style="text-align: right; padding: 12px 8px; font-weight: 600; color: var(--color-text-primary);">V.Total</th>
+            </tr>
+          </thead>
+          <tbody id="items-table">
+            <tr>
+              <td style="padding: 12px 8px; border-bottom: 0.5px solid var(--color-border-tertiary);">11</td>
+              <td style="padding: 12px 8px; border-bottom: 0.5px solid var(--color-border-tertiary);">Hamburguesas</td>
+              <td style="padding: 12px 8px; border-bottom: 0.5px solid var(--color-border-tertiary); text-align: right;">10.000</td>
+              <td style="padding: 12px 8px; border-bottom: 0.5px solid var(--color-border-tertiary); text-align: right; font-weight: 600;">110.000</td>
+            </tr>
+            <tr>
+              <td style="padding: 12px 8px; border-bottom: 0.5px solid var(--color-border-tertiary);">11</td>
+              <td style="padding: 12px 8px; border-bottom: 0.5px solid var(--color-border-tertiary);">Gaseosas</td>
+              <td style="padding: 12px 8px; border-bottom: 0.5px solid var(--color-border-tertiary); text-align: right;">3.800</td>
+              <td style="padding: 12px 8px; border-bottom: 0.5px solid var(--color-border-tertiary); text-align: right; font-weight: 600;">38.500</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Totales -->
+      <div style="display: flex; justify-content: flex-end; margin-bottom: 2rem;">
+        <div style="width: 300px;">
+          <div style="display: flex; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid var(--color-border-tertiary); font-size: 13px;">
+            <span>Subtotal:</span>
+            <span id="subtotal">148.500</span>
+          </div>
+          <div style="display: flex; justify-content: space-between; padding: 12px 0; background: var(--color-background-secondary); padding: 12px; border-radius: var(--border-radius-md); font-weight: 600; font-size: 15px;">
+            <span>Total:</span>
+            <span id="total">148.500</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Pie de página -->
+      <div style="text-align: center; padding-top: 1.5rem; border-top: 1px solid var(--color-border-tertiary); font-size: 12px; color: var(--color-text-secondary);">
+        <p style="margin: 0;">Gracias por su compra</p>
+      </div>
+    </div>
+
+    <!-- Botones de acción -->
+    <div style="display: flex; gap: 12px; justify-content: center; margin-top: 2rem;">
+      <button style="padding: 10px 24px; border: 0.5px solid var(--color-border-secondary); border-radius: var(--border-radius-md); background: transparent; cursor: pointer; font-size: 14px; color: var(--color-text-primary); font-weight: 500;" onclick="window.print();">
+        <i class="ti ti-printer" style="margin-right: 6px;"></i>Imprimir
+      </button>
+      <button style="padding: 10px 24px; border: 0.5px solid var(--color-border-secondary); border-radius: var(--border-radius-md); background: var(--color-background-info); color: var(--color-text-info); cursor: pointer; font-size: 14px; font-weight: 500;" onclick="descargarJSON();">
+        <i class="ti ti-download" style="margin-right: 6px;"></i>Descargar datos
+      </button>
+    </div>
+  </div>
+
+  <script>
+    function formatearFecha(fecha) {
+      const d = new Date(fecha);
+      return d.toLocaleDateString('es-CO', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\//g, '/');
+    }
+
+    function actualizarPreview() {
+      document.getElementById('preview-empresa').textContent = document.getElementById('empresa').value;
+      document.getElementById('preview-nit').innerHTML = '<strong>NIT:</strong> ' + document.getElementById('nit').value;
+      document.getElementById('preview-direccion').innerHTML = '<strong>Dirección:</strong> ' + document.getElementById('direccion').value;
+      document.getElementById('preview-telefono').innerHTML = '<strong>Teléfono:</strong> ' + document.getElementById('telefono').value;
+      document.getElementById('preview-cliente').innerHTML = '<strong>' + document.getElementById('cliente').value + '</strong>';
+      document.getElementById('preview-documento').textContent = document.getElementById('documento').value;
+      
+      const fechaEm = document.getElementById('fechaEmision').value;
+      const fechaEnt = document.getElementById('fechaEntrega').value;
+      
+      if(fechaEm) {
+        const dEm = new Date(fechaEm);
+        document.getElementById('preview-fechaEmision').textContent = dEm.toLocaleDateString('es-CO');
+      }
+      if(fechaEnt) {
+        const dEnt = new Date(fechaEnt);
+        document.getElementById('preview-fechaEntrega').textContent = dEnt.toLocaleDateString('es-CO');
+      }
+    }
+
+    function descargarJSON() {
+      const datos = {
+        empresa: document.getElementById('empresa').value,
+        nit: document.getElementById('nit').value,
+        direccion: document.getElementById('direccion').value,
+        telefono: document.getElementById('telefono').value,
+        cliente: document.getElementById('cliente').value,
+        documento: document.getElementById('documento').value,
+        fechaEmision: document.getElementById('fechaEmision').value,
+        fechaEntrega: document.getElementById('fechaEntrega').value
+      };
+      
+      const json = JSON.stringify(datos, null, 2);
+      const blob = new Blob([json], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'factura.json';
+      a.click();
+    }
+
+    document.getElementById('empresa').addEventListener('input', actualizarPreview);
+    document.getElementById('nit').addEventListener('input', actualizarPreview);
+    document.getElementById('direccion').addEventListener('input', actualizarPreview);
+    document.getElementById('telefono').addEventListener('input', actualizarPreview);
+    document.getElementById('cliente').addEventListener('input', actualizarPreview);
+    document.getElementById('documento').addEventListener('input', actualizarPreview);
+    document.getElementById('fechaEmision').addEventListener('change', actualizarPreview);
+    document.getElementById('fechaEntrega').addEventListener('change', actualizarPreview);
+
+    actualizarPreview();
+  </script>
+</div>

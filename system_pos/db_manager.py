@@ -274,6 +274,48 @@ def get_all_products():
     conn.close()
     return products
 
+def get_product(product_id):
+    """Obtiene un producto por su identificador o devuelve None."""
+    conn = connect_db()
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT id, nombre, precio, categoria, stock FROM productos WHERE id = ?",
+            (product_id,)
+        )
+        return cursor.fetchone()
+    finally:
+        conn.close()
+
+def update_product(product_id, nombre, precio, categoria="General", stock=0):
+    """Actualiza todos los campos editables de un producto."""
+    conn = connect_db()
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            UPDATE productos
+            SET nombre = ?, precio = ?, categoria = ?, stock = ?
+            WHERE id = ?
+            """,
+            (nombre, precio, categoria, stock, product_id)
+        )
+        conn.commit()
+        return cursor.rowcount > 0
+    finally:
+        conn.close()
+
+def delete_product(product_id):
+    """Elimina un producto y devuelve True cuando el registro existía."""
+    conn = connect_db()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM productos WHERE id = ?", (product_id,))
+        conn.commit()
+        return cursor.rowcount > 0
+    finally:
+        conn.close()
+
 # Más funciones para actualizar, eliminar productos, registrar ventas, etc.
 # Ejemplo:
 def record_sale(total, items_vendidos, cliente="", direccion="", metodo_pago="", observaciones=None, split_payment=None):
@@ -350,8 +392,9 @@ def get_all_facturas():
     try:
         cursor.execute("""
             SELECT f.id, f.num_factura, f.fecha_hora, f.cliente, f.metodo_pago, f.valor_total
-            FROM facturas f
-            ORDER BY f.id DESC
+            FROM facturas AS f
+            WHERE date(f.fecha_hora) BETWEEN date('now', 'localtime') AND date('now', 'localtime', '+1 day')
+            ORDER BY f.fecha_hora;
         """)
         facturas = cursor.fetchall()
         
@@ -523,7 +566,7 @@ def actualizar_stock(stock_num):
     try:
         conn = connect_db()
         cursor = conn.cursor()
-        cursor.execute("UPDATE productos SET stock = stock + ? WHERE stock > 0", (stock_num,))
+        cursor.execute("UPDATE productos SET stock = stock + ? WHERE stock >= 0", (stock_num,))
         conn.commit()
     except Exception as e:
         print("Error al actualizar stock:", e)
@@ -597,6 +640,109 @@ def delete_all_cart_errores():
         print("✓ Todos los errores del carrito han sido eliminados")
     except Exception as e:
         print(f"Error al eliminar todos los errores del carrito: {e}")
+
+
+# --- VENTAS DE PRODUCTOS SIN STOCK ---
+
+def _crear_tabla_ventas_agotados(cursor):
+    """Crea la tabla si falta.
+
+    Va aparte de create_tables() porque main.py la tiene comentada,
+    asi que la tabla debe poder crearse sola en el primer uso.
+    """
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS ventas_agotados (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            fecha_hora TEXT NOT NULL,
+            num_factura TEXT,
+            producto_nombre TEXT NOT NULL,
+            cantidad INTEGER NOT NULL,
+            precio REAL NOT NULL,
+            subtotal REAL NOT NULL
+        )
+    ''')
+
+
+def registrar_venta_agotado(num_factura, items_agotados):
+    """Registra los productos que se vendieron estando sin stock.
+
+    items_agotados: lista de dicts con 'nombre', 'cantidad' y 'precio'.
+    """
+    if not items_agotados:
+        return
+    try:
+        from datetime import datetime
+        conn = connect_db()
+        cursor = conn.cursor()
+        _crear_tabla_ventas_agotados(cursor)
+        fecha_hora = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+        for item in items_agotados:
+            nombre = item.get('nombre', 'Desconocido')
+            precio = item.get('precio', 0)
+            cantidad = item.get('cantidad', 0)
+            cursor.execute('''
+                INSERT INTO ventas_agotados (fecha_hora, num_factura, producto_nombre, cantidad, precio, subtotal)
+                VALUES (?, ?, ?, ?, ?, ?)
+            ''', (fecha_hora, num_factura, nombre, cantidad, precio, precio * cantidad))
+
+        conn.commit()
+        conn.close()
+        print(f"⚠ Vendidos sin stock: {len(items_agotados)} producto(s) en factura {num_factura}")
+    except Exception as e:
+        print(f"Error al registrar venta de agotados: {e}")
+
+
+def contar_ventas_agotados(fecha=None):
+    """Cuenta unidades de productos vendidos sin stock.
+
+    Sin fecha cuenta el dia de hoy. Devuelve 0 si algo falla.
+    """
+    try:
+        conn = connect_db()
+        cursor = conn.cursor()
+        _crear_tabla_ventas_agotados(cursor)
+        if fecha is None:
+            cursor.execute(
+                "SELECT COALESCE(SUM(cantidad), 0) FROM ventas_agotados WHERE date(fecha_hora) = date('now', 'localtime')"
+            )
+        else:
+            cursor.execute(
+                "SELECT COALESCE(SUM(cantidad), 0) FROM ventas_agotados WHERE date(fecha_hora) = ?", (fecha,)
+            )
+        total = cursor.fetchone()[0]
+        conn.close()
+        return total
+    except Exception as e:
+        print(f"Error al contar ventas de agotados: {e}")
+        return 0
+
+
+def get_ventas_agotados(fecha=None):
+    """Detalle de los productos vendidos sin stock (hoy por defecto)."""
+    try:
+        conn = connect_db()
+        cursor = conn.cursor()
+        _crear_tabla_ventas_agotados(cursor)
+        if fecha is None:
+            cursor.execute('''
+                SELECT id, fecha_hora, num_factura, producto_nombre, cantidad, precio, subtotal
+                FROM ventas_agotados WHERE date(fecha_hora) = date('now', 'localtime')
+                ORDER BY fecha_hora DESC
+            ''')
+        else:
+            cursor.execute('''
+                SELECT id, fecha_hora, num_factura, producto_nombre, cantidad, precio, subtotal
+                FROM ventas_agotados WHERE date(fecha_hora) = ?
+                ORDER BY fecha_hora DESC
+            ''', (fecha,))
+        rows = cursor.fetchall()
+        conn.close()
+        return rows
+    except Exception as e:
+        print(f"Error al obtener ventas de agotados: {e}")
+        return []
+
 
 if __name__ == '__main__':
     create_tables()
