@@ -6,7 +6,7 @@ from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import letter
 from datetime import datetime
 import subprocess
-from PIL import Image, ImageTk, ImageFilter
+from PIL import Image, ImageTk, ImageFilter, ImageColor, ImageDraw
 
 
 def _rounded_widget_bg(widget):
@@ -26,8 +26,89 @@ def _rounded_rect(canvas_widget, x1, y1, x2, y2, radius, **kwargs):
     return canvas_widget.create_polygon(points, smooth=True, splinesteps=24, **kwargs)
 
 
+def _mix_color(color_a, color_b, amount):
+    """Mezcla dos colores hexadecimales; amount=0 conserva A y 1 usa B."""
+    rgb_a = ImageColor.getrgb(color_a)
+    rgb_b = ImageColor.getrgb(color_b)
+    amount = max(0.0, min(1.0, amount))
+    mixed = tuple(round(a + (b - a) * amount) for a, b in zip(rgb_a, rgb_b))
+    return '#{:02X}{:02X}{:02X}'.format(*mixed)
+
+
+def _gradient_button_surface(width, height, background, top_color, bottom_color,
+                             radius, shadow_color, pressed=False):
+    """Renderiza un botón antialias con degradado, luz superior y sombra 3D."""
+    scale = 3
+    width, height = max(8, int(width)), max(8, int(height))
+    canvas_bg = ImageColor.getrgb(background)
+    image = Image.new('RGB', (width * scale, height * scale), canvas_bg)
+    draw = ImageDraw.Draw(image)
+
+    def box(values):
+        return tuple(int(value * scale) for value in values)
+
+    radius_px = max(3, int(radius * scale))
+    # Sombra en dos niveles: negro suave debajo y tono cálido junto al botón.
+    draw.rounded_rectangle(
+        box((3, 7, width - 2, height - 1)), radius=radius_px,
+        fill=_mix_color(shadow_color, '#000000', 0.30)
+    )
+    draw.rounded_rectangle(
+        box((3, 5, width - 2, height - 3)), radius=radius_px,
+        fill=ImageColor.getrgb(shadow_color)
+    )
+
+    offset = 2 if pressed else 0
+    body = box((2 + offset, 2 + offset, width - 4 + offset, height - 6 + offset))
+    body_radius = min(radius_px, max(3, (body[3] - body[1]) // 2))
+    mask = Image.new('L', image.size, 0)
+    ImageDraw.Draw(mask).rounded_rectangle(body, radius=body_radius, fill=255)
+
+    gradient = Image.new('RGB', image.size, ImageColor.getrgb(bottom_color))
+    gradient_draw = ImageDraw.Draw(gradient)
+    body_height = max(1, body[3] - body[1])
+    top_rgb = ImageColor.getrgb(top_color)
+    bottom_rgb = ImageColor.getrgb(bottom_color)
+    for y in range(body[1], body[3] + 1):
+        ratio = (y - body[1]) / body_height
+        # El primer tercio queda más luminoso como en el botón de referencia.
+        ratio = ratio ** 1.2
+        color = tuple(round(a + (b - a) * ratio) for a, b in zip(top_rgb, bottom_rgb))
+        gradient_draw.line((body[0], y, body[2], y), fill=color)
+    image.paste(gradient, mask=mask)
+
+    draw = ImageDraw.Draw(image)
+    draw.rounded_rectangle(
+        body, radius=body_radius,
+        outline=_mix_color(bottom_color, '#24140F', 0.42), width=scale
+    )
+
+    # Luz superior: línea central y arcos que siguen la curva de las esquinas.
+    highlight = _mix_color(top_color, '#FFFFFF', 0.44)
+    highlight_y = body[1] + 2 * scale
+    highlight_pad = min(body_radius, 13 * scale)
+    draw.line(
+        (body[0] + highlight_pad, highlight_y,
+         body[2] - highlight_pad, highlight_y),
+        fill=highlight, width=scale
+    )
+    arc_size = min(body_radius * 2, body[3] - body[1])
+    draw.arc(
+        (body[0] + 2 * scale, body[1] + 2 * scale,
+         body[0] + 2 * scale + arc_size, body[1] + 2 * scale + arc_size),
+        180, 270, fill=highlight, width=scale
+    )
+    draw.arc(
+        (body[2] - 2 * scale - arc_size, body[1] + 2 * scale,
+         body[2] - 2 * scale, body[1] + 2 * scale + arc_size),
+        270, 360, fill=highlight, width=scale
+    )
+
+    return image.resize((width, height), Image.Resampling.LANCZOS)
+
+
 class RoundedButton(tk.Canvas):
-    """Botón redondeado que conserva la paleta y el comportamiento originales."""
+    """Botón redondeado con sombra, relieve y respuesta al presionarlo."""
 
     def __init__(self, master, text, command=None, width=120, height=34,
                  fill="#733F34", foreground="#FFFFFF",
@@ -38,20 +119,31 @@ class RoundedButton(tk.Canvas):
         self.fill_color, self.hover_fill = fill, hover_fill
         self.foreground, self.radius, self.text_font = foreground, radius, font
         self.hovered = False
+        self.pressed = False
         self.bind("<Configure>", self._draw)
         self.bind("<Enter>", self._enter)
         self.bind("<Leave>", self._leave)
-        self.bind("<Button-1>", self._activate)
-        self.bind("<Return>", self._activate)
-        self.bind("<space>", self._activate)
+        self.bind("<Button-1>", self._press)
+        self.bind("<ButtonRelease-1>", self._release)
+        self.bind("<Return>", self._activate_keyboard)
+        self.bind("<space>", self._activate_keyboard)
         self.after_idle(self._draw)
 
     def _draw(self, _event=None):
         self.delete("all")
         width, height = max(8, self.winfo_width()), max(8, self.winfo_height())
         fill = self.hover_fill if self.hovered else self.fill_color
-        _rounded_rect(self, 2, 2, width - 2, height - 2, self.radius, fill=fill, outline=fill)
-        self.create_text(width / 2, height / 2, text=self.label, fill=self.foreground,
+        offset = 2 if self.pressed else 0
+        top_color = _mix_color(fill, '#FFFFFF', 0.25 if self.hovered else 0.19)
+        bottom_color = _mix_color(fill, '#000000', 0.07)
+        surface = _gradient_button_surface(
+            width, height, self.cget('bg'), top_color, bottom_color,
+            self.radius, '#321B16', self.pressed
+        )
+        self._surface_photo = ImageTk.PhotoImage(surface)
+        self.create_image(0, 0, anchor='nw', image=self._surface_photo)
+        self.create_text(width / 2 + offset, (height - 3) / 2 + offset,
+                         text=self.label, fill=self.foreground,
                          font=self.text_font, justify="center")
 
     def _enter(self, _event):
@@ -60,16 +152,31 @@ class RoundedButton(tk.Canvas):
 
     def _leave(self, _event):
         self.hovered = False
+        self.pressed = False
         self._draw()
 
-    def _activate(self, _event=None):
+    def _press(self, _event=None):
+        self.pressed = True
+        self.focus_set()
+        self._draw()
+
+    def _release(self, event=None):
+        was_pressed = self.pressed
+        self.pressed = False
+        self._draw()
+        if was_pressed and event is not None:
+            inside = 0 <= event.x < self.winfo_width() and 0 <= event.y < self.winfo_height()
+            if inside and self.command:
+                self.command()
+
+    def _activate_keyboard(self, _event=None):
         self.focus_set()
         if self.command:
             self.command()
 
 
 class RoundedProductButton(tk.Canvas):
-    """Botón de producto original con esquinas redondeadas."""
+    """Tarjeta de producto redondeada con sombra y efecto de pulsación."""
 
     def __init__(self, master, product, image, command, sold_out=False):
         super().__init__(master, width=160, height=126, bg=_rounded_widget_bg(master),
@@ -77,35 +184,49 @@ class RoundedProductButton(tk.Canvas):
         self.product, self.photo = product, image
         self.command, self.sold_out = command, sold_out
         self.hovered = False
+        self.pressed = False
         self.bind("<Configure>", self._draw)
         self.bind("<Enter>", self._enter)
         self.bind("<Leave>", self._leave)
-        self.bind("<Button-1>", self._activate)
-        self.bind("<Return>", self._activate)
-        self.bind("<space>", self._activate)
+        self.bind("<Button-1>", self._press)
+        self.bind("<ButtonRelease-1>", self._release)
+        self.bind("<Return>", self._activate_keyboard)
+        self.bind("<space>", self._activate_keyboard)
         self.after_idle(self._draw)
 
     def _draw(self, _event=None):
         self.delete("all")
         width, height = max(20, self.winfo_width()), max(20, self.winfo_height())
         if self.sold_out:
-            fill = "#5A4038" if self.hovered else "#3B2B26"
-            foreground = "#C9B9A8"
+            top_color = "#733F34" if self.hovered else "#493630"
+            bottom_color = "#733F34" if self.hovered else "#493630"
+            foreground = "#694F33"
+            shadow_color = "#493631"
         else:
-            fill = "#F39A2E" if self.hovered else "#FFAD43"
+            top_color = "#FFB85B" if self.hovered else "#FFAD43"
+            bottom_color = "#FF9256" if self.hovered else "#FF853B"
             foreground = "#FFFFFF"
-        _rounded_rect(self, 2, 2, width - 2, height - 2, 14,
-                      fill=fill, outline="#733F34", width=1)
+            shadow_color = "#B36F3C"
+        offset = 2 if self.pressed else 0
+        surface = _gradient_button_surface(
+            width, height, self.cget('bg'), top_color, bottom_color,
+            14, shadow_color, self.pressed
+        )
+        self._surface_photo = ImageTk.PhotoImage(surface)
+        self.create_image(0, 0, anchor='nw', image=self._surface_photo)
         if self.photo:
-            self.create_image(width / 2, 38, image=self.photo)
+            self.create_image(width / 2 + offset, 38 + offset, image=self.photo)
         product_id, name, price, category, stock = self.product
         name_size = 8 if len(name) > 18 else 10
-        self.create_text(10, 76, anchor="nw", text=name, width=max(80, width - 20),
+        self.create_text(10 + offset, 76 + offset, anchor="nw", text=name,
+                         width=max(80, width - 20),
                          fill=foreground, font=("Arial", name_size, "bold"))
-        self.create_text(10, height - 8, anchor="sw", text=f"${price:,.0f}",
+        self.create_text(10 + offset, height - 10 + offset, anchor="sw",
+                         text=f"${price:,.0f}",
                          fill=foreground, font=("Arial", 10, "bold"))
         if self.sold_out:
-            self.create_text(width - 8, height - 8, anchor="se", text="AGOTADO",
+            self.create_text(width - 10 + offset, height - 10 + offset,
+                             anchor="se", text="AGOTADO",
                              fill=foreground, font=("Arial", 8, "bold"))
 
     def _enter(self, _event):
@@ -114,9 +235,24 @@ class RoundedProductButton(tk.Canvas):
 
     def _leave(self, _event):
         self.hovered = False
+        self.pressed = False
         self._draw()
 
-    def _activate(self, _event=None):
+    def _press(self, _event=None):
+        self.pressed = True
+        self.focus_set()
+        self._draw()
+
+    def _release(self, event=None):
+        was_pressed = self.pressed
+        self.pressed = False
+        self._draw()
+        if was_pressed and event is not None:
+            inside = 0 <= event.x < self.winfo_width() and 0 <= event.y < self.winfo_height()
+            if inside and self.command:
+                self.command()
+
+    def _activate_keyboard(self, _event=None):
         self.focus_set()
         if self.command:
             self.command()
@@ -124,7 +260,7 @@ class RoundedProductButton(tk.Canvas):
 # Paleta global (basada en logo.png)
 PALETTE_BG1 = "#D7C6AA"  # Fondo principal claro
 PALETTE_BG2 = "#D7C6AA"  # Fondo secundario
-PALETTE_ACCENT = '#733F34'  # Acento suave
+PALETTE_ACCENT = '#733F34'  # Marrón cálido de la paleta
 PALETTE_DARK = '#733F34'  # Marrón oscuro
 PALETTE_DARK2 = "#FFFFFF"  # fondo blanco
 
@@ -148,6 +284,7 @@ class POSApp:
         # Saldos iniciales y totales acumulados (en memoria)
         self.saldo_nequi_inicio = 0.0
         self.saldo_daviplata_inicio = 0.0
+        self.saldo_efectivo_inicio = 0.0
         self.saldo_nequi_total = 0.0
         self.saldo_daviplata_total = 0.0
         # Control de modo pro
@@ -158,9 +295,10 @@ class POSApp:
 
         # Cargar saldos iniciales desde la base de datos
         try:
-            nequi_db, daviplata_db = db_manager.get_saldos_iniciales()
+            nequi_db, daviplata_db, efectivo_db = db_manager.get_saldos_iniciales()
             self.saldo_nequi_inicio = nequi_db
             self.saldo_daviplata_inicio = daviplata_db
+            self.saldo_efectivo_inicio = efectivo_db
         except Exception:
             pass
 
@@ -177,7 +315,7 @@ class POSApp:
         self.PALETTE_BG1 = "#D7C6AA"  # Fondo principal claro
         self.PALETTE_BG2 = "#D7C6AA"  # Fondo secundario
         self.PALETTE_BG3 = "#FFAD43"  # Fondo secundario
-        self.PALETTE_ACCENT = '#733F34'  # Acento suave
+        self.PALETTE_ACCENT = '#733F34'  # Marrón cálido de la paleta
         self.PALETTE_DARK = '#733F34'  # Marrón oscuro
         self.PALETTE_DARK2 = "#FFFFFF"  # Burdeos oscuro
 
@@ -191,6 +329,10 @@ class POSApp:
         # Fondo raíz
         try:
             self.root.configure(bg=self.PALETTE_BG1)
+            # Los botones tk clásicos también conservan relieve en toda la app.
+            self.root.option_add('*Button.relief', 'raised')
+            self.root.option_add('*Button.borderWidth', 3)
+            self.root.option_add('*Button.highlightThickness', 1)
         except Exception:
             pass
 
@@ -201,27 +343,30 @@ class POSApp:
 
         # Botones
         # Use dark colors only for text; backgrounds should remain light/accent
-        self.style.configure('TButton', font=('Arial', 11, 'bold'), foreground=self.PALETTE_DARK2, background=self.PALETTE_ACCENT, padding=6)
-        self.style.map('TButton', background=[('active', self.PALETTE_ACCENT), ('!disabled', self.PALETTE_ACCENT)],
+        self.style.configure('TButton', font=('Arial', 11, 'bold'),
+                             foreground=self.PALETTE_DARK2, background=self.PALETTE_ACCENT,
+                             padding=6, borderwidth=3, relief='raised')
+        self.style.map('TButton', relief=[('pressed', 'sunken'), ('active', 'raised')],
+                        background=[('active', self.PALETTE_ACCENT), ('!disabled', self.PALETTE_ACCENT)],
                         foreground=[('active', 'white'), ('!disabled', self.PALETTE_DARK2)])
 
         # Botón de producto con estilo propio
-        self.style.configure('Product.TButton', font=('Arial', 10, 'bold'), foreground=self.PALETTE_DARK, background=self.PALETTE_BG3, borderwidth=1, relief='raised', padding=6)
-        self.style.map('Product.TButton', background=[('active', self.PALETTE_ACCENT), ('!disabled', self.PALETTE_BG3)])
+        self.style.configure('Product.TButton', font=('Arial', 10, 'bold'), foreground=self.PALETTE_DARK, background=self.PALETTE_BG3, borderwidth=3, relief='raised', padding=6)
+        self.style.map('Product.TButton', relief=[('pressed', 'sunken')], background=[('active', self.PALETTE_ACCENT), ('!disabled', self.PALETTE_BG3)])
 
         # Producto agotado: se ve oscuro pero sigue siendo clickeable
         self.PALETTE_AGOTADO = '#3B2B26'
         self.PALETTE_AGOTADO_TXT = '#C9B9A8'
-        self.style.configure('Agotado.TButton', font=('Arial', 10, 'bold'), foreground=self.PALETTE_AGOTADO_TXT, background=self.PALETTE_AGOTADO, borderwidth=1, relief='sunken', padding=6)
-        self.style.map('Agotado.TButton', background=[('active', '#5A4038'), ('!disabled', self.PALETTE_AGOTADO)],
+        self.style.configure('Agotado.TButton', font=('Arial', 10, 'bold'), foreground=self.PALETTE_AGOTADO_TXT, background=self.PALETTE_AGOTADO, borderwidth=3, relief='raised', padding=6)
+        self.style.map('Agotado.TButton', relief=[('pressed', 'sunken')], background=[('active', '#5A4038'), ('!disabled', self.PALETTE_AGOTADO)],
                         foreground=[('active', '#FFFFFF'), ('!disabled', self.PALETTE_AGOTADO_TXT)])
 
         # Botones de categoría/acción
-        self.style.configure('Category.TButton', font=('Arial', 12, 'bold'), foreground=self.PALETTE_DARK2, background=self.PALETTE_ACCENT)
-        self.style.map('Category.TButton', background=[('active', self.PALETTE_ACCENT)])
+        self.style.configure('Category.TButton', font=('Arial', 12, 'bold'), foreground=self.PALETTE_DARK2, background=self.PALETTE_ACCENT, borderwidth=3, relief='raised')
+        self.style.map('Category.TButton', relief=[('pressed', 'sunken')], background=[('active', self.PALETTE_ACCENT)])
         # Los botones de acción usan fondo de acento y texto oscuro; evitar fondos oscuros
-        self.style.configure('Action.TButton', font=('Arial', 12, 'bold'), foreground=self.PALETTE_DARK2, background=self.PALETTE_ACCENT)
-        self.style.map('Action.TButton', background=[('active', self.PALETTE_BG2)])
+        self.style.configure('Action.TButton', font=('Arial', 12, 'bold'), foreground=self.PALETTE_DARK2, background=self.PALETTE_ACCENT, borderwidth=3, relief='raised')
+        self.style.map('Action.TButton', relief=[('pressed', 'sunken')], background=[('active', self.PALETTE_BG2)])
 
         # Entradas
         self.style.configure('TEntry', fieldbackground=self.PALETTE_BG2, background=self.PALETTE_BG2, foreground=self.PALETTE_DARK)
@@ -413,6 +558,11 @@ class POSApp:
         self.agotados_label.pack(fill=tk.X)
         self.actualizar_contador_agotados()
 
+        # Aviso de ventas cerradas sin metodo de pago
+        self.pendientes_label = ttk.Label(cart_frame, text="", font=('Arial', 10, 'bold'))
+        self.pendientes_label.pack(fill=tk.X)
+        self.actualizar_contador_pendientes()
+
         # Botones de Acción (al final)
         action_buttons_frame = ttk.Frame(cart_frame)
         action_buttons_frame.pack(fill=tk.X, pady=10)
@@ -441,23 +591,47 @@ class POSApp:
         self.root.config(menu=admin_menu)
         file_menu = tk.Menu(admin_menu, tearoff=0, bg=PALETTE_BG2, fg=PALETTE_DARK, activebackground=PALETTE_ACCENT)
         admin_menu.add_cascade(label="Administración", menu=file_menu)
-        file_menu.add_command(label="Gestionar Productos", command=self.manage_products)
+        self.file_menu = file_menu
+        self._refresh_admin_menu()
+
+    def _refresh_admin_menu(self):
+        """Redibuja Administración; las herramientas sensibles solo existen en Modo Pro."""
+        if not hasattr(self, 'file_menu'):
+            return
+        file_menu = self.file_menu
+        file_menu.delete(0, tk.END)
+
+        if self.modo_pro_activo:
+            file_menu.add_command(label="Gestionar Productos", command=self.manage_products)
         file_menu.add_command(label="rellenar stock", command=self.rellenar_stock)
         file_menu.add_separator()
         file_menu.add_command(label="Ver Facturas", command=self.view_facturas)
+        file_menu.add_command(label="lista metodos de pago ", command=self.list_select_method)
         file_menu.add_command(label="Estadísticas del Día", command=self.show_daily_statistics)
-        file_menu.add_command(label="Configurar Saldos Iniciales", command=self.set_initial_balances)
+        if self.modo_pro_activo:
+            file_menu.add_command(label="Configurar Saldos Iniciales", command=self.set_initial_balances)
         file_menu.add_separator()
         file_menu.add_command(label="Reimprimir última factura", command=self.show_reprint_modal)
         file_menu.add_separator()
         file_menu.add_command(label="crear factura empresa", command=self.crear_factura_empresa)
         file_menu.add_command(label="modo pro", command=self.modo_pro)
         file_menu.add_command(label="Exportar Facturas PDF (Excel)", command=self.export_facturas_completas_excel)
-        file_menu.add_command(label="Lista de Errores", command=self._show_cart_errors_with_password)
+        if self.modo_pro_activo:
+            file_menu.add_command(label="Lista de Errores", command=self._show_cart_errors_with_password)
         file_menu.add_separator()
         file_menu.add_command(label="Salir", command=self.root.quit)
 
-        
+    def _require_pro_mode(self):
+        """Evita accesos indirectos a herramientas protegidas."""
+        if self.modo_pro_activo:
+            return True
+        messagebox.showwarning(
+            "Modo Pro requerido",
+            "Activa el Modo Pro con la contraseña para usar esta opción.",
+            parent=self.root
+        )
+        return False
+
     def increase_cart_item_qty(self):
         """Aumenta la cantidad del producto seleccionado en el carrito."""
         selected_indices = self.cart_listbox.curselection()
@@ -588,6 +762,23 @@ class POSApp:
         if col > 0:  # Only configure if there are columns
             self.product_buttons_frame.grid_columnconfigure(tuple(range(col)), weight=1)
 
+    def list_select_method(self):
+        """Abre la lista para asignar el metodo de pago a las ventas del dia."""
+        MetodosPagoWindow(self.root, app=self)
+
+    def actualizar_contador_pendientes(self):
+        """Refresca el aviso de facturas sin metodo de pago asignado."""
+        if not hasattr(self, 'pendientes_label'):
+            return
+        try:
+            n = db_manager.contar_facturas_pendientes()
+        except Exception:
+            n = 0
+        if n:
+            self.pendientes_label.config(text=f"{n} sin metodo de pago", foreground='#B00020')
+        else:
+            self.pendientes_label.config(text="", foreground=self.PALETTE_DARK)
+
     def actualizar_contador_agotados(self):
         """Refresca el contador de productos vendidos sin stock hoy."""
         if not hasattr(self, 'agotados_label'):
@@ -700,6 +891,8 @@ class POSApp:
 
     def List_errores(self):
         """Muestra la tabla de errores del carrito visualmente en una nueva ventana."""
+        if not self._require_pro_mode():
+            return
         try:
             errores = db_manager.get_all_cart_errores()
         except Exception as e:
@@ -712,6 +905,7 @@ class POSApp:
         
         # Crear ventana para mostrar los errores
         error_window = tk.Toplevel(self.root)
+        self.cart_errors_window = error_window
         error_window.title("Lista de Errores del Carrito")
         error_window.geometry("900x500")
         error_window.transient(self.root)
@@ -811,6 +1005,8 @@ class POSApp:
 
     def _show_cart_errors_with_password(self):
         """Pide contraseña antes de mostrar la lista de errores del carrito."""
+        if not self._require_pro_mode():
+            return
         password = simpledialog.askstring("Contraseña requerida", "Ingrese la contraseña para acceder a la lista de errores:", show='*', parent=self.root)
         if password is None:
             return
@@ -1208,57 +1404,112 @@ class POSApp:
         DateSelectionModal(self.root, show_statistics_for_date)
 
     def set_initial_balances(self):
-        """Muestra un modal para configurar los saldos iniciales de Nequi y Daviplata y los guarda en la base de datos."""
+        """Crea una versión de saldos y muestra siempre la versión más reciente."""
+        if not self._require_pro_mode():
+            return
+        if hasattr(self, 'initial_balances_window') and self.initial_balances_window.winfo_exists():
+            self.initial_balances_window.lift()
+            self.initial_balances_window.focus_force()
+            return
+
         dialog = tk.Toplevel(self.root)
+        self.initial_balances_window = dialog
         dialog.title("Saldos Iniciales")
-        dialog.geometry("320x180")
+        dialog.geometry("390x330")
+        dialog.resizable(False, False)
         dialog.transient(self.root)
         dialog.grab_set()
 
-        # Cargar valores actuales desde la base de datos
-
         try:
-            nequi_db, daviplata_db, efectivo_db = db_manager.get_saldos_iniciales()
+            historial = db_manager.get_saldos_iniciales_historial(
+                limit=1,
+                ultimos_dos_dias=True
+            )
+            if historial:
+                _version, _fecha, nequi_db, daviplata_db, efectivo_db = historial[0]
+            else:
+                nequi_db, daviplata_db, efectivo_db = 0.0, 0.0, 0.0
         except Exception:
-            nequi_db, daviplata_db, efectivo_db = getattr(self, 'saldo_nequi_inicio', 0.0), getattr(self, 'saldo_daviplata_inicio', 0.0), getattr(self, 'saldo_efectivo_inicio', 0.0)
+            nequi_db = getattr(self, 'saldo_nequi_inicio', 0.0)
+            daviplata_db = getattr(self, 'saldo_daviplata_inicio', 0.0)
+            efectivo_db = getattr(self, 'saldo_efectivo_inicio', 0.0)
+            historial = []
+
+        ttk.Label(dialog, text="Configurar saldos iniciales",
+                  font=('Arial', 14, 'bold')).pack(pady=(16, 4))
+        if historial:
+            version_id, fecha_hora, _n, _d, _e = historial[0]
+            version_text = f"Última versión: #{version_id}  •  {fecha_hora}"
+        else:
+            version_text = "Última versión: sin historial"
+        version_label = ttk.Label(dialog, text=version_text, font=('Arial', 9))
+        version_label.pack(pady=(0, 8))
+        ttk.Label(
+            dialog,
+            text="Periodo consultado: hoy y día anterior",
+            font=('Arial', 9)
+        ).pack(pady=(0, 2))
 
         ttk.Label(dialog, text="Saldo inicial Nequi:").pack(pady=(10, 2), anchor='w', padx=12)
         nequi_entry = ttk.Entry(dialog)
         nequi_entry.pack(fill=tk.X, padx=12)
-        nequi_entry.insert(0, f"{nequi_db}")
+        nequi_entry.insert(0, f"{nequi_db:,.0f}".replace(",", "."))
 
         ttk.Label(dialog, text="Saldo inicial Daviplata:").pack(pady=(10, 2), anchor='w', padx=12)
         daviplata_entry = ttk.Entry(dialog)
         daviplata_entry.pack(fill=tk.X, padx=12)
-        daviplata_entry.insert(0, f"{daviplata_db}")
+        daviplata_entry.insert(0, f"{daviplata_db:,.0f}".replace(",", "."))
 
         ttk.Label(dialog, text="Saldo inicial Efectivo:").pack(pady=(10, 2), anchor='w', padx=12)
         efectivo_entry = ttk.Entry(dialog)
         efectivo_entry.pack(fill=tk.X, padx=12)
-        efectivo_entry.insert(0, f"{efectivo_db}")
+        efectivo_entry.insert(0, f"{efectivo_db:,.0f}".replace(",", "."))
+
+        def parse_amount(value):
+            value = value.strip().replace("$", "").replace(" ", "")
+            if "." in value and "," in value:
+                value = value.replace(".", "").replace(",", ".")
+            elif "." in value:
+                decimals = len(value.rsplit(".", 1)[1])
+                value = value.replace(".", "" if decimals == 3 else ".")
+            elif "," in value:
+                decimals = len(value.rsplit(",", 1)[1])
+                value = value.replace(",", "" if decimals == 3 else ".")
+            return float(value or 0)
 
         def save_balances():
             try:
-                nequi_val = float(nequi_entry.get() or 0)
-                daviplata_val = float(daviplata_entry.get() or 0)
-                efectivo_val = float(efectivo_entry.get() or 0)
+                nequi_val = parse_amount(nequi_entry.get())
+                daviplata_val = parse_amount(daviplata_entry.get())
+                efectivo_val = parse_amount(efectivo_entry.get())
             except ValueError:
-                messagebox.showerror("Error", "Introduce valores numéricos válidos.")
+                messagebox.showerror("Error", "Introduce valores numéricos válidos.", parent=dialog)
+                return
+            try:
+                version_id = db_manager.set_saldos_iniciales(
+                    (nequi_val, daviplata_val, efectivo_val)
+                )
+            except Exception as e:
+                messagebox.showerror("Error", f"No se pudo guardar en la base de datos: {e}", parent=dialog)
                 return
             self.saldo_nequi_inicio = nequi_val
             self.saldo_daviplata_inicio = daviplata_val
             self.saldo_efectivo_inicio = efectivo_val
-            try:
-                db_manager.set_saldos_iniciales((nequi_val, daviplata_val, efectivo_val))
-            except Exception as e:
-                messagebox.showwarning("Advertencia", f"No se pudo guardar en la base de datos: {e}")
-            messagebox.showinfo("Saldos guardados", "Saldos iniciales actualizados correctamente.")
+            messagebox.showinfo(
+                "Saldos guardados",
+                f"Saldos guardados como versión #{version_id}.",
+                parent=dialog
+            )
             dialog.destroy()
 
         btn_frame = ttk.Frame(dialog)
-        btn_frame.pack(fill=tk.X, pady=12, padx=12)
-        ttk.Button(btn_frame, text="Guardar", command=save_balances).pack(side=tk.LEFT, padx=5)
-        ttk.Button(btn_frame, text="Cancelar", command=dialog.destroy).pack(side=tk.RIGHT, padx=5)
+        btn_frame.pack(fill=tk.X, pady=16, padx=12)
+        RoundedButton(btn_frame, "Guardar nueva versión", save_balances, width=180).pack(
+            side=tk.LEFT, padx=5
+        )
+        RoundedButton(btn_frame, "Cancelar", dialog.destroy, width=120).pack(
+            side=tk.RIGHT, padx=5
+        )
 
     def generate_statistics_pdf(self, fecha_str, metodos_pago, suma_total, nequi_inicio=0.0, daviplata_inicio=0.0):
         """Genera un PDF con las estadísticas del día, incluyendo saldos iniciales y finales."""
@@ -1345,6 +1596,8 @@ class POSApp:
 
     def manage_products(self):
         """Abre el CRUD completo para crear, consultar, editar y eliminar productos."""
+        if not self._require_pro_mode():
+            return
         if hasattr(self, 'manage_window') and self.manage_window.winfo_exists():
             self.manage_window.lift()
             self.manage_window.focus_force()
@@ -1803,7 +2056,11 @@ class POSApp:
         estado_label.pack(pady=10)
 
         # Descripción
-        ttk.Label(dialog, text="El modo pro habilita los botones de editar y eliminar\nen la ventana de facturas.", font=('Arial', 9), justify=tk.CENTER).pack(pady=10)
+        ttk.Label(
+            dialog,
+            text="El modo pro muestra y habilita Gestión de Productos,\nLista de Errores y Saldos Iniciales.",
+            font=('Arial', 9), justify=tk.CENTER
+        ).pack(pady=10)
 
         # La contraseña se valida al cambiar el estado.
         password_frame = ttk.Frame(dialog)
@@ -1834,16 +2091,33 @@ class POSApp:
                 return
             self.modo_pro_activo = True
             estado_label.config(text="Estado actual: Activado")
+            self._refresh_admin_menu()
             password_entry.delete(0, tk.END)
-            messagebox.showinfo("Modo Pro", "✓ Modo Pro activado correctamente.\nLos botones de editar y eliminar están habilitados.", parent=dialog)
+            messagebox.showinfo(
+                "Modo Pro",
+                "✓ Modo Pro activado correctamente.\nLas herramientas protegidas ya están visibles.",
+                parent=dialog
+            )
 
         def desactivar_modo_pro():
             if not password_correcta():
                 return
             self.modo_pro_activo = False
             estado_label.config(text="Estado actual: Desactivado")
+            self._refresh_admin_menu()
+            for window_name in ('manage_window', 'initial_balances_window', 'cart_errors_window'):
+                protected_window = getattr(self, window_name, None)
+                try:
+                    if protected_window and protected_window.winfo_exists():
+                        protected_window.destroy()
+                except tk.TclError:
+                    pass
             password_entry.delete(0, tk.END)
-            messagebox.showinfo("Modo Pro", "✗ Modo Pro desactivado correctamente.\nLos botones de editar y eliminar están deshabilitados.", parent=dialog)
+            messagebox.showinfo(
+                "Modo Pro",
+                "✗ Modo Pro desactivado.\nLas herramientas protegidas se ocultaron y cerraron.",
+                parent=dialog
+            )
 
         RoundedButton(btn_frame, "✓ Activar", activar_modo_pro).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=5)
         RoundedButton(btn_frame, "✗ Desactivar", desactivar_modo_pro).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=5)
@@ -1917,6 +2191,7 @@ class POSApp:
                         except Exception as e:
                             print(f"Error recargando productos: {e}")
                         self.actualizar_contador_agotados()
+                        self.actualizar_contador_pendientes()
 
                         # Generar factura con detalles de pago, dirección y observaciones
                         try:
@@ -1948,7 +2223,9 @@ class POSApp:
                 
                 ObservationsModal(self.root, items, on_observations_saved, app=self)
             
-            PaymentMethodModal( self.root, total_with_shipping, on_payment_method,  app=self, client=client, address=address)
+            # Se omite la seleccion de metodo de pago: la venta se cierra como
+            # PENDIENTE y el metodo se asigna despues desde "lista metodos de pago".
+            on_payment_method(db_manager.METODO_PENDIENTE, total_with_shipping, 0)
         
         AddressModal(self.root, on_address_selected)
        
@@ -2467,7 +2744,12 @@ class SplitPaymentModal(tk.Toplevel):
             widget.destroy()
         
         self.current_step = step
-        self.progress_label.config(text=f"Paso {step} de 2: Selecciona el método de pago #{step}")
+        if step == 2:
+            restante = self.total - self.amount1
+            self.progress_label.config(
+                text=f"Paso 2 de 2: ¿con qué se paga el restante de ${restante:,.0f}?".replace(",", "."))
+        else:
+            self.progress_label.config(text=f"Paso {step} de 2: Selecciona el método de pago #{step}")
         
         ttk.Button(self.button_frame, text="💵 EFECTIVO", 
                    command=lambda: self.select_method(step, 'EFECTIVO')).pack(fill=tk.X, pady=5)
@@ -2477,20 +2759,18 @@ class SplitPaymentModal(tk.Toplevel):
                    command=lambda: self.select_method(step, 'DAVIPLATA')).pack(fill=tk.X, pady=5)
     
     def select_method(self, step, method):
-        """Selecciona el método y pide el monto."""
+        """Paso 1: pide el monto. Paso 2: toma el restante y cierra.
+
+        En el segundo método no hay nada que preguntar: por definición se
+        lleva todo lo que falta para completar el total.
+        """
         if step == 1:
             self.method1 = method
-            if method == 'EFECTIVO':
-                self.show_amount_input(1)
-            else:
-                # Para métodos digitales, permitir ingresar monto
-                self.show_amount_input(1)
+            self.show_amount_input(1)
         elif step == 2:
             self.method2 = method
-            if method == 'EFECTIVO':
-                self.show_amount_input(2)
-            else:
-                self.show_amount_input(2)
+            self.amount2 = round(self.total - self.amount1, 2)
+            self.complete_split_payment()
     
     def show_amount_input(self, step):
         """Muestra input para capturar monto del pago."""
@@ -2514,8 +2794,13 @@ class SplitPaymentModal(tk.Toplevel):
                 amount = float(amount_entry.get().replace(".", ""))
                 
                 if step == 1:
-                    if amount <= 0 or amount > self.total:
-                        messagebox.showwarning("Error", f"El monto debe estar entre 0 y ${self.total:,.0f}")
+                    # Debe quedar algo para el segundo metodo, que ahora se
+                    # asigna solo: si el paso 1 cubre el total, no hay division.
+                    if amount <= 0 or amount >= self.total:
+                        messagebox.showwarning(
+                            "Error",
+                            f"El monto debe ser mayor que 0 y menor que ${self.total:,.0f}"
+                            .replace(",", "."))
                         return
                     self.amount1 = amount
                     remaining_for_step2 = self.total - self.amount1
@@ -3542,3 +3827,214 @@ class DailyStatisticsWindow(tk.Toplevel):
             saldo_pendiente_var.set(f"Saldo Pendiente: ${saldo:,.0f}")
 
         tree.bind("<Button-1>", on_tree_click)
+
+
+class MetodosPagoWindow(tk.Toplevel):
+    """Asignación diferida del método de pago.
+
+    Las ventas se cierran sin método (PENDIENTE) y aquí se les asigna.
+    Muestra todas las facturas del día: las pendientes arriba y las ya
+    asignadas al final de la cola, para poder corregir una equivocada.
+    """
+
+    # Mismas etiquetas que SplitPaymentModal / PaymentMethodModal
+    METODOS = [
+        ('NEQUI', '💳 NEQUI'),
+        ('DAVIPLATA', '💳 DAVIPLATA'),
+        ('EFECTIVO', '💵 EFECTIVO'),
+        ('DIVIDIDO', '🔀 PAGO DIVIDIDO'),
+    ]
+
+    # Paleta de la app (la misma de los ttk.Button del modal de pago)
+    FONDO = PALETTE_BG1
+    BORDE = '#B9A98D'
+    ENCABEZADO = PALETTE_ACCENT
+    TEXTO = PALETTE_DARK
+    LINK = PALETTE_DARK
+    SELECCIONADO = '#FFAD43'   # naranja del tema, marca el metodo asignado
+
+    def __init__(self, parent, app=None, fecha=None):
+        super().__init__(parent)
+        self.app = app
+        self.fecha = fecha  # None = hoy
+        self.title("Lista de métodos de pago")
+        self.geometry("1540x580")
+        self.configure(bg=self.FONDO)
+        self.transient(parent)
+        # El metodo asignado se resalta con el naranja del tema; el resto
+        # usa el marron estandar de la app.
+        estilo = ttk.Style()
+        estilo.configure('MetodoActivo.TButton', font=('Arial', 9, 'bold'),
+                         foreground=PALETTE_DARK, background=self.SELECCIONADO, padding=4)
+        estilo.map('MetodoActivo.TButton',
+                   background=[('active', self.SELECCIONADO), ('!disabled', self.SELECCIONADO)],
+                   foreground=[('active', PALETTE_DARK), ('!disabled', PALETTE_DARK)])
+        estilo.configure('Metodo.TButton', font=('Arial', 9, 'bold'),
+                         foreground=PALETTE_DARK2, background=PALETTE_ACCENT, padding=4)
+        estilo.map('Metodo.TButton',
+                   background=[('active', PALETTE_ACCENT), ('!disabled', PALETTE_ACCENT)],
+                   foreground=[('active', PALETTE_DARK2), ('!disabled', PALETTE_DARK2)])
+        self.create_widgets()
+        self.cargar()
+
+    # ---------- construcción ----------
+
+    def create_widgets(self):
+        top = tk.Frame(self, bg=self.FONDO)
+        top.pack(fill=tk.X, padx=16, pady=(14, 6))
+
+        tk.Label(top, text="Métodos de pago", bg=self.FONDO, fg=self.TEXTO,
+                 font=('Arial', 15, 'bold')).pack(side=tk.LEFT)
+
+        self.resumen_label = tk.Label(top, text="", bg=self.FONDO, fg='#B00020',
+                                      font=('Arial', 10, 'bold'))
+        self.resumen_label.pack(side=tk.LEFT, padx=12)
+
+        ttk.Button(top, text="✖️ Cerrar", command=self.destroy).pack(side=tk.RIGHT)
+        ttk.Button(top, text="🔄 Actualizar", command=self.cargar).pack(side=tk.RIGHT, padx=6)
+
+        # Encabezado de columnas
+        head = tk.Frame(self, bg=self.FONDO)
+        head.pack(fill=tk.X, padx=16)
+        for texto, ancho in (("FECHA", 12), ("FACTURA", 12), ("CLIENTE", 20),
+                             ("VALOR", 14), ("MÉTODO DE PAGO", 20)):
+            tk.Label(head, text=texto, bg=self.FONDO, fg=self.ENCABEZADO,
+                     font=('Arial', 9, 'bold'), width=ancho,
+                     anchor='w').pack(side=tk.LEFT, padx=(0, 6))
+        tk.Frame(self, bg=self.BORDE, height=1).pack(fill=tk.X, padx=16, pady=(6, 0))
+
+        # Zona desplazable con las filas
+        cont = tk.Frame(self, bg=self.FONDO)
+        cont.pack(fill=tk.BOTH, expand=True, padx=16, pady=(0, 14))
+
+        self.canvas = tk.Canvas(cont, bg=self.FONDO, highlightthickness=0)
+        scroll = ttk.Scrollbar(cont, orient="vertical", command=self.canvas.yview)
+        self.filas_frame = tk.Frame(self.canvas, bg=self.FONDO)
+
+        self.filas_frame.bind("<Configure>",
+                              lambda e: self.canvas.configure(scrollregion=self.canvas.bbox("all")))
+        ventana = self.canvas.create_window((0, 0), window=self.filas_frame, anchor="nw")
+        self.canvas.bind("<Configure>", lambda e: self.canvas.itemconfig(ventana, width=e.width))
+        self.canvas.configure(yscrollcommand=scroll.set)
+
+        self.canvas.pack(side="left", fill="both", expand=True)
+        scroll.pack(side="right", fill="y")
+        self.canvas.bind("<MouseWheel>",
+                         lambda e: self.canvas.yview_scroll(int(-1 * (e.delta / 120)), "units"))
+
+    # ---------- datos ----------
+
+    @staticmethod
+    def texto_metodo(metodo):
+        """Convierte 'EFECTIVO|10000.0+NEQUI|8000.0' en algo legible."""
+        if not metodo or metodo == db_manager.METODO_PENDIENTE:
+            return ""
+        if '|' in metodo and '+' in metodo:
+            partes = []
+            for tramo in metodo.split('+'):
+                if '|' in tramo:
+                    nombre, monto = tramo.split('|', 1)
+                    try:
+                        partes.append(f"{nombre} ${float(monto):,.0f}")
+                    except ValueError:
+                        partes.append(tramo)
+                else:
+                    partes.append(tramo)
+            return " + ".join(partes)
+        return metodo
+
+    @staticmethod
+    def esta_pendiente(metodo):
+        return (not metodo) or str(metodo).strip() == '' or metodo == db_manager.METODO_PENDIENTE
+
+    def cargar(self):
+        """Relee las facturas de hoy y ayer y redibuja la lista."""
+        for w in self.filas_frame.winfo_children():
+            w.destroy()
+
+        try:
+            facturas = db_manager.get_facturas_para_metodo_pago(self.fecha)
+        except Exception as e:
+            messagebox.showerror("Error", f"No se pudieron cargar las facturas: {e}", parent=self)
+            return
+
+        if not facturas:
+            tk.Label(self.filas_frame, text="No hay facturas registradas hoy ni ayer.",
+                     bg=self.FONDO, fg=self.ENCABEZADO, font=('Arial', 11)).pack(pady=30)
+            self.resumen_label.config(text="")
+            return
+
+        pendientes = sum(1 for f in facturas if self.esta_pendiente(f[3]))
+        self.resumen_label.config(
+            text=(f"⚠ {pendientes} sin asignar · hoy y ayer"
+                  if pendientes else "✓ todas asignadas · hoy y ayer"),
+            fg='#B00020' if pendientes else '#22A745')
+
+        for factura in facturas:
+            self._fila(factura)
+
+    def _fila(self, factura):
+        num_factura, cliente, valor, metodo, fecha_hora = factura
+        pendiente = self.esta_pendiente(metodo)
+
+        fila = tk.Frame(self.filas_frame, bg=self.FONDO)
+        fila.pack(fill=tk.X, pady=2)
+
+        fecha_texto = str(fecha_hora)[:10] if fecha_hora else "—"
+        tk.Label(fila, text=fecha_texto, bg=self.FONDO, fg=self.TEXTO,
+                 font=('Arial', 10), width=12, anchor='w').pack(side=tk.LEFT, padx=(0, 6))
+        tk.Label(fila, text=num_factura, bg=self.FONDO, fg=self.TEXTO,
+                 font=('Arial', 11), width=12, anchor='w').pack(side=tk.LEFT, padx=(0, 6))
+        tk.Label(fila, text=(cliente or "—"), bg=self.FONDO, fg=self.LINK,
+                 font=('Arial', 11), width=20, anchor='w').pack(side=tk.LEFT, padx=(0, 6))
+        tk.Label(fila, text=f"${valor:,.0f}", bg=self.FONDO, fg=self.TEXTO,
+                 font=('Arial', 11), width=14, anchor='w').pack(side=tk.LEFT, padx=(0, 6))
+
+        botones = tk.Frame(fila, bg=self.FONDO)
+        botones.pack(side=tk.LEFT)
+
+        for clave, etiqueta in self.METODOS:
+            activo = (not pendiente) and self._es_el_metodo(clave, metodo)
+            ttk.Button(
+                botones,
+                text=("✓ " + etiqueta) if activo else etiqueta,
+                style='MetodoActivo.TButton' if activo else 'Metodo.TButton',
+                command=lambda c=clave, n=num_factura, v=valor: self.asignar(n, c, v),
+            ).pack(side=tk.LEFT, padx=3)
+
+        if not pendiente:
+            tk.Label(fila, text=self.texto_metodo(metodo), bg=self.FONDO,
+                     fg=self.ENCABEZADO, font=('Arial', 9)).pack(side=tk.LEFT, padx=10)
+
+        tk.Frame(self.filas_frame, bg=self.BORDE, height=1).pack(fill=tk.X)
+
+    @staticmethod
+    def _es_el_metodo(clave, metodo):
+        """El pago dividido se guarda como 'A|monto+B|monto', no como 'DIVIDIDO'."""
+        if clave == 'DIVIDIDO':
+            return '|' in str(metodo) and '+' in str(metodo)
+        return str(metodo) == clave
+
+    # ---------- acciones ----------
+
+    def asignar(self, num_factura, clave, valor):
+        if clave == 'DIVIDIDO':
+            def al_dividir(datos, _amount, _change):
+                if not isinstance(datos, tuple):
+                    return
+                m1, m2, a1, a2 = datos
+                self._guardar(num_factura, f"{m1}|{a1}+{m2}|{a2}")
+            SplitPaymentModal(self, valor, al_dividir)
+            return
+        self._guardar(num_factura, clave)
+
+    def _guardar(self, num_factura, metodo):
+        try:
+            if db_manager.actualizar_metodo_pago(num_factura, metodo) == 0:
+                messagebox.showwarning("Sin cambios", f"No se encontró la factura {num_factura}.", parent=self)
+        except Exception as e:
+            messagebox.showerror("Error", f"No se pudo asignar el método: {e}", parent=self)
+            return
+        self.cargar()
+        if self.app is not None and hasattr(self.app, 'actualizar_contador_pendientes'):
+            self.app.actualizar_contador_pendientes()

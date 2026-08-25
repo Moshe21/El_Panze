@@ -147,6 +147,26 @@ def create_tables():
     except Exception:
         pass
     cursor.execute("INSERT OR IGNORE INTO config_saldos (id, nequi_inicial, daviplata_inicial, efectivo_inicial) VALUES (1, 0, 0, 0)")
+
+    # Historial versionado de saldos iniciales. config_saldos se conserva por
+    # compatibilidad con el resto de la aplicación.
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS saldos_iniciales_historial (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            fecha_hora TEXT NOT NULL,
+            nequi_inicial REAL NOT NULL DEFAULT 0,
+            daviplata_inicial REAL NOT NULL DEFAULT 0,
+            efectivo_inicial REAL NOT NULL DEFAULT 0
+        )
+    ''')
+    cursor.execute('''
+        INSERT INTO saldos_iniciales_historial
+            (fecha_hora, nequi_inicial, daviplata_inicial, efectivo_inicial)
+        SELECT datetime('now', 'localtime'), nequi_inicial, daviplata_inicial, efectivo_inicial
+        FROM config_saldos
+        WHERE id = 1
+          AND NOT EXISTS (SELECT 1 FROM saldos_iniciales_historial)
+    ''')
     
     # Tabla para guardar errores del carrito
     cursor.execute('''
@@ -393,7 +413,7 @@ def get_all_facturas():
         cursor.execute("""
             SELECT f.id, f.num_factura, f.fecha_hora, f.cliente, f.metodo_pago, f.valor_total
             FROM facturas AS f
-            WHERE date(f.fecha_hora) BETWEEN date('now', 'localtime') AND date('now', 'localtime', '+1 day')
+            WHERE date(f.fecha_hora) BETWEEN date('now', 'localtime', '-1 day') AND date('now', 'localtime')
             ORDER BY f.fecha_hora;
         """)
         facturas = cursor.fetchall()
@@ -539,17 +559,61 @@ def delete_pending_order(order_id):
     conn.commit()
     conn.close()
 
+def _ensure_saldos_historial(cursor):
+    """Crea el historial y migra la configuración actual cuando sea necesario."""
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS saldos_iniciales_historial (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            fecha_hora TEXT NOT NULL,
+            nequi_inicial REAL NOT NULL DEFAULT 0,
+            daviplata_inicial REAL NOT NULL DEFAULT 0,
+            efectivo_inicial REAL NOT NULL DEFAULT 0
+        )
+    ''')
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS config_saldos (
+            id INTEGER PRIMARY KEY CHECK (id = 1),
+            nequi_inicial REAL DEFAULT 0,
+            daviplata_inicial REAL DEFAULT 0,
+            efectivo_inicial REAL DEFAULT 0
+        )
+    ''')
+    try:
+        cursor.execute("ALTER TABLE config_saldos ADD COLUMN efectivo_inicial REAL DEFAULT 0")
+    except sqlite3.OperationalError:
+        pass
+    cursor.execute(
+        "INSERT OR IGNORE INTO config_saldos "
+        "(id, nequi_inicial, daviplata_inicial, efectivo_inicial) VALUES (1, 0, 0, 0)"
+    )
+    cursor.execute('''
+        INSERT INTO saldos_iniciales_historial
+            (fecha_hora, nequi_inicial, daviplata_inicial, efectivo_inicial)
+        SELECT datetime('now', 'localtime'), nequi_inicial, daviplata_inicial, efectivo_inicial
+        FROM config_saldos
+        WHERE id = 1
+          AND NOT EXISTS (SELECT 1 FROM saldos_iniciales_historial)
+    ''')
+
 def get_saldos_iniciales():
+    """Devuelve Nequi, Daviplata y Efectivo de la versión más reciente."""
     conn = connect_db()
-    cursor = conn.cursor()
-    cursor.execute("SELECT nequi_inicial, daviplata_inicial, efectivo_inicial FROM config_saldos WHERE id = 1")
-    row = cursor.fetchone()
-    conn.close()
-    return row if row else (0.0, 0.0, 0.0)
+    try:
+        cursor = conn.cursor()
+        _ensure_saldos_historial(cursor)
+        cursor.execute('''
+            SELECT nequi_inicial, daviplata_inicial, efectivo_inicial
+            FROM saldos_iniciales_historial
+            ORDER BY id DESC
+            LIMIT 1
+        ''')
+        row = cursor.fetchone()
+        conn.commit()
+        return row if row else (0.0, 0.0, 0.0)
+    finally:
+        conn.close()
 
 def set_saldos_iniciales(nequi, daviplata=None, efectivo=None):
-    conn = connect_db()
-    cursor = conn.cursor()
     # Permitir llamada con una tupla/lista o con tres argumentos
     if daviplata is None and efectivo is None and isinstance(nequi, (tuple, list)) and len(nequi) == 3:
         nequi_val, daviplata_val, efectivo_val = nequi
@@ -557,9 +621,57 @@ def set_saldos_iniciales(nequi, daviplata=None, efectivo=None):
         nequi_val = nequi
         daviplata_val = daviplata if daviplata is not None else 0.0
         efectivo_val = efectivo if efectivo is not None else 0.0
-    cursor.execute("UPDATE config_saldos SET nequi_inicial = ?, daviplata_inicial = ?, efectivo_inicial = ? WHERE id = 1", (nequi_val, daviplata_val, efectivo_val))
-    conn.commit()
-    conn.close()
+    nequi_val = float(nequi_val)
+    daviplata_val = float(daviplata_val)
+    efectivo_val = float(efectivo_val)
+    conn = connect_db()
+    try:
+        cursor = conn.cursor()
+        _ensure_saldos_historial(cursor)
+        cursor.execute(
+            "UPDATE config_saldos SET nequi_inicial = ?, daviplata_inicial = ?, efectivo_inicial = ? WHERE id = 1",
+            (nequi_val, daviplata_val, efectivo_val)
+        )
+        from datetime import datetime
+        fecha_hora = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        cursor.execute('''
+            INSERT INTO saldos_iniciales_historial
+                (fecha_hora, nequi_inicial, daviplata_inicial, efectivo_inicial)
+            VALUES (?, ?, ?, ?)
+        ''', (fecha_hora, nequi_val, daviplata_val, efectivo_val))
+        version_id = cursor.lastrowid
+        conn.commit()
+        return version_id
+    finally:
+        conn.close()
+
+def get_saldos_iniciales_historial(limit=None, ultimos_dos_dias=False):
+    """Devuelve el historial, opcionalmente limitado a hoy y al día anterior."""
+    conn = connect_db()
+    try:
+        cursor = conn.cursor()
+        _ensure_saldos_historial(cursor)
+        query = '''
+            SELECT f.id, f.fecha_hora, f.nequi_inicial,
+                   f.daviplata_inicial, f.efectivo_inicial
+            FROM saldos_iniciales_historial AS f
+        '''
+        if ultimos_dos_dias:
+            query += '''
+                WHERE date(f.fecha_hora) BETWEEN date('now', 'localtime', '-1 day')
+                                               AND date('now', 'localtime')
+            '''
+        query += " ORDER BY f.id DESC"
+        params = ()
+        if limit is not None:
+            query += " LIMIT ?"
+            params = (max(0, int(limit)),)
+        cursor.execute(query, params)
+        rows = cursor.fetchall()
+        conn.commit()
+        return rows
+    finally:
+        conn.close()
 
 def actualizar_stock(stock_num):
     # Aumentar stock solo a los productos que tienen stock > 0
@@ -742,6 +854,97 @@ def get_ventas_agotados(fecha=None):
     except Exception as e:
         print(f"Error al obtener ventas de agotados: {e}")
         return []
+
+
+# --- ASIGNACION DIFERIDA DEL METODO DE PAGO ---
+# La venta se cierra sin metodo de pago y queda como PENDIENTE.
+# El metodo se asigna despues desde "lista metodos de pago".
+
+METODO_PENDIENTE = 'PENDIENTE'
+
+
+def get_facturas_para_metodo_pago(fecha=None):
+    """Facturas de hoy y ayer por defecto para asignarles método de pago.
+
+    Las pendientes van primero; las ya asignadas quedan al final de la cola.
+    Devuelve tuplas (num_factura, cliente, valor_total, metodo_pago, fecha_hora).
+    """
+    orden = """
+        ORDER BY CASE WHEN f.metodo_pago IS NULL OR TRIM(f.metodo_pago) = ''
+                       OR f.metodo_pago = 'PENDIENTE' THEN 0 ELSE 1 END,
+                 f.fecha_hora
+    """
+    try:
+        conn = connect_db()
+        cursor = conn.cursor()
+        if fecha is None:
+            cursor.execute("""
+                SELECT f.num_factura, f.cliente, f.valor_total,
+                       f.metodo_pago, f.fecha_hora
+                FROM facturas AS f
+                WHERE date(f.fecha_hora) BETWEEN date('now', 'localtime', '-1 day')
+                                               AND date('now', 'localtime')
+            """ + orden)
+        else:
+            cursor.execute("""
+                SELECT f.num_factura, f.cliente, f.valor_total,
+                       f.metodo_pago, f.fecha_hora
+                FROM facturas AS f WHERE date(f.fecha_hora) = ?
+            """ + orden, (fecha,))
+        rows = cursor.fetchall()
+        conn.close()
+        return rows
+    except Exception as e:
+        print(f"Error al obtener facturas para metodo de pago: {e}")
+        return []
+
+
+def actualizar_metodo_pago(num_factura, metodo):
+    """Asigna (o corrige) el metodo de pago de una factura ya registrada.
+
+    Actualiza las DOS tablas: 'facturas' y 'facturas_completas'. Si solo se
+    tocara una, las estadisticas del dia (que leen facturas_completas)
+    seguirian mostrando la venta como PENDIENTE.
+    """
+    try:
+        conn = connect_db()
+        cursor = conn.cursor()
+        cursor.execute("UPDATE facturas SET metodo_pago = ? WHERE num_factura = ?", (metodo, num_factura))
+        tocadas = cursor.rowcount
+        cursor.execute("UPDATE facturas_completas SET metodo_pago = ? WHERE num_factura = ?", (metodo, num_factura))
+        conn.commit()
+        conn.close()
+        # Sin simbolos fuera de ASCII: en consola cp1252 el print lanza
+        # UnicodeEncodeError, el except lo atrapa y la funcion devolveria 0
+        # aunque el UPDATE si se guardo.
+        print("OK Factura %s -> %s" % (num_factura, metodo))
+        return tocadas
+    except Exception as e:
+        print(f"Error al actualizar metodo de pago: {e}")
+        return 0
+
+
+def contar_facturas_pendientes(fecha=None):
+    """Cuenta pendientes de hoy y ayer, o de una fecha específica."""
+    try:
+        conn = connect_db()
+        cursor = conn.cursor()
+        cond = "metodo_pago IS NULL OR TRIM(metodo_pago) = '' OR metodo_pago = 'PENDIENTE'"
+        if fecha is None:
+            cursor.execute("""
+                SELECT COUNT(*) FROM facturas AS f
+                WHERE date(f.fecha_hora) BETWEEN date('now', 'localtime', '-1 day')
+                                               AND date('now', 'localtime')
+                  AND (%s)
+            """ % cond)
+        else:
+            cursor.execute("SELECT COUNT(*) FROM facturas WHERE date(fecha_hora) = ? AND (%s)" % cond, (fecha,))
+        n = cursor.fetchone()[0]
+        conn.close()
+        return n
+    except Exception as e:
+        print(f"Error al contar facturas pendientes: {e}")
+        return 0
 
 
 if __name__ == '__main__':
