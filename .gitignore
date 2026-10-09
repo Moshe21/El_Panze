@@ -1,3 +1,4 @@
 data/pos_database.db
 /system_pos/facturas
 /system_pos
+system_pos/data/pos_database.db
