@@ -414,7 +414,7 @@ def get_all_facturas():
             SELECT f.id, f.num_factura, f.fecha_hora, f.cliente, f.metodo_pago, f.valor_total
             FROM facturas AS f
             WHERE date(f.fecha_hora) BETWEEN date('now', 'localtime', '-1 day') AND date('now', 'localtime')
-            ORDER BY f.fecha_hora;
+            ORDER BY  f.fecha_hora DESC;
         """)
         facturas = cursor.fetchall()
         
@@ -882,8 +882,7 @@ def get_facturas_para_metodo_pago(fecha=None):
                 SELECT f.num_factura, f.cliente, f.valor_total,
                        f.metodo_pago, f.fecha_hora
                 FROM facturas AS f
-                WHERE date(f.fecha_hora) BETWEEN date('now', 'localtime', '-1 day')
-                                               AND date('now', 'localtime')
+                WHERE date(f.fecha_hora) = date('now', 'localtime')
             """ + orden)
         else:
             cursor.execute("""

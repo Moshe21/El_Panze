@@ -1011,7 +1011,7 @@ class POSApp:
         if password is None:
             return
         
-        if password == "9874+":
+        if password == "2684":
             self.List_errores()
         else:
             messagebox.showerror("Contraseña incorrecta", "La contraseña ingresada no es correcta.")
@@ -2075,7 +2075,7 @@ class POSApp:
         btn_frame.pack(fill=tk.X, padx=20, pady=15)
 
         def password_correcta():
-            if password_entry.get() == "2684":
+            if password_entry.get() == "5263":
                 return True
             messagebox.showerror(
                 "Contraseña incorrecta",
@@ -2172,60 +2172,50 @@ class POSApp:
                 # Modal 3: Capturar observaciones de cada producto
                 def on_observations_saved(observations):
                     try:
-                        items_agotados = [
-                            {'nombre': it['nombre'], 'cantidad': it['cantidad'], 'precio': it['precio']}
-                            for it in items
-                            if self.cart.get(it['id'], {}).get('agotado')
-                        ]
+                        venta_id = db_manager.record_sale(total_with_shipping, items, cliente=client, metodo_pago=method_display, observaciones=observations, split_payment=split_data)
 
-                        num_factura = db_manager.record_sale(total_with_shipping, items, cliente=client, direccion=address, metodo_pago=method_display, observaciones=observations, split_payment=split_data)
-
-                        try:
-                            db_manager.registrar_venta_agotado(num_factura, items_agotados)
-                        except Exception as e:
-                            print(f"Error registrando ventas de agotados: {e}")
-
-                        # Recargar productos en UI para reflejar el stock nuevo
+                        # Recargar productos en UI para ocultar los que quedaron sin stock
                         try:
                             self.load_products()
                         except Exception as e:
                             print(f"Error recargando productos: {e}")
-                        self.actualizar_contador_agotados()
-                        self.actualizar_contador_pendientes()
 
                         # Generar factura con detalles de pago, dirección y observaciones
                         try:
                             if is_split:
                                 method1, method2, amount1, amount2 = split_data
-                                self.generate_invoice_pdf(num_factura, items, total_with_shipping, cliente=client, dirrecion=address, 
+                                self.generate_invoice_pdf(venta_id, items, total_with_shipping, cliente=client, dirrecion=address, 
                                                         metodo_pago=method_display, cambio=change, observaciones=observations,
                                                         split_payment=(method1, method2, amount1, amount2))
                             else:
-                                self.generate_invoice_pdf(num_factura, items, total_with_shipping, cliente=client, dirrecion=address, 
+                                self.generate_invoice_pdf(venta_id, items, total_with_shipping, cliente=client, dirrecion=address, 
                                                         metodo_pago=method_display, cambio=change, observaciones=observations)
                         except Exception as e:
                             messagebox.showerror("Error en PDF/Impresión", f"La venta se registró pero hubo error al generar/imprimir factura: {e}")
 
-                        messagebox.showinfo("Venta Registrada", f"Venta #{num_factura} completada con éxito.\nDirección: {address}\nMétodo: {payment_info}")
+                        messagebox.showinfo("Venta Registrada", f"Venta #{venta_id} completada con éxito.\nDirección: {address}\nMétodo: {payment_info}")
                         self.clear_cart()
-                        
+                        """
                         # Abrir ventana de facturas para mostrar la nueva factura
-                        #try:
-                        #    FacturasWindow(self.root, app=self)
-                        #except Exception as e:
-                        #    print(f"Error abriendo FacturasWindow: {e}")
-                            
+                        try:
+                            FacturasWindow(self.root, app=self)
+                        except Exception as e:
+                            print(f"Error abriendo FacturasWindow: {e}")
+                         """   
                     except Exception as e:
                         messagebox.showerror("Error en la venta", f"No se pudo completar la venta: {e}")
                         print(f"Error completo en on_observations_saved: {e}")
                         import traceback
                         traceback.print_exc()
                 
-                ObservationsModal(self.root, items, on_observations_saved, app=self)
+                ObservationsModal(self.root, items, on_observations_saved)
             
-            # Se omite la seleccion de metodo de pago: la venta se cierra como
-            # PENDIENTE y el metodo se asigna despues desde "lista metodos de pago".
-            on_payment_method(db_manager.METODO_PENDIENTE, total_with_shipping, 0)
+            PaymentMethodModal( self.root,
+                                total_with_shipping,
+                                on_payment_method,
+                                app=self,
+                                client=client,
+                                address=address)
         
         AddressModal(self.root, on_address_selected)
        
