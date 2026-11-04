@@ -1,3 +1,30 @@
-data/pos_database.db
-/system_pos/facturas
-/system_pos
+# === Bases de datos del POS ===
+# NUNCA deben subir a GitHub: contienen facturacion, apartamento y
+# metodo de pago de los clientes (dato personal, Ley 1581/2012).
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+
+# === Facturas generadas por el POS ===
+system_pos/facturas/
+system_pos/facturas_antiguas/
+system_pos/facturas excel/
+system_pos/data/table.csv
+facturas_*.csv
+
+# === Binarios ===
+*.exe
+
+# === Python ===
+__pycache__/
+*.pyc
+*.pyo
+
+# === Configuracion local con credenciales ===
+config.local.json
+system_pos/config.local.json
+.env
+.env.local
