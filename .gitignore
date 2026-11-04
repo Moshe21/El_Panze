@@ -35,3 +35,4 @@ system_pos/PRUEBAS/facturas/
 # Facturas antiguas y reportes de estadisticas
 system_pos/facturas_antiguas/
 system_pos/estadisticas/*.pdf
+system_pos/PRUEBAS/*.pdf
