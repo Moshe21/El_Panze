@@ -31,3 +31,7 @@ system_pos/config.local.json
 
 # Facturas de la carpeta de pruebas
 system_pos/PRUEBAS/facturas/
+
+# Facturas antiguas y reportes de estadisticas
+system_pos/facturas_antiguas/
+system_pos/estadisticas/*.pdf
