@@ -28,3 +28,6 @@ config.local.json
 system_pos/config.local.json
 .env
 .env.local
+
+# Facturas de la carpeta de pruebas
+system_pos/PRUEBAS/facturas/
